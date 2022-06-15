@@ -12,14 +12,9 @@ const (
 	DefaultHomeDirName          = ".teleport-data-analytics"
 	DefaultConfigDirName        = "configs" // TODO delete initialization.DefaultConfigDirName
 	DefaultConfigName           = "config.toml"
-	Overflow             Status = 3
-	TooSmall             Status = 2
-	Success              Status = 1
-	Failed               Status = 0
 )
 
 var (
-	ReconciliationStatus Status
 	Home                 string
 	LocalConfig          string
 	UserDir, _           = os.UserHomeDir()
@@ -38,7 +33,6 @@ type Status int8
 
 type Config struct {
 	MysqlAddr          string
-	ServerUrl          string
 	SyncEnable         bool
 	ReconcileEnable    bool
 	Network            string
@@ -48,11 +42,6 @@ type Config struct {
 	EvmChainsFormat    string //option
 	CosmosChainsFormat string //option
 	TokensFormat       string //option
-	PacketGasDemand    float64
-	AckGasDemand       float64
-	RelayRate          float64
-	FreeChains         []string
-	LightClients       []string
 	ReloadPeriod       time.Duration
 	EvmChains          []EvmConfig
 	Teleport           TendermintConfig
@@ -112,7 +101,6 @@ type AddressInfo struct {
 
 func LoadConfigs() *Config {
 	//Default
-	ReconciliationStatus = Success
 	if Home == "" {
 		Home = DefaultHomePath
 	}

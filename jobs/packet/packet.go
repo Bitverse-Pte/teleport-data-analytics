@@ -33,7 +33,6 @@ type PacketPool struct {
 	Codec             *codec.ProtoCodec
 	DB                *gorm.DB
 	log               *logrus.Logger
-	relayFate         float64
 	Chains            map[string]chains.BlockChain
 	ChainMap          map[string]string
 	IDToName          map[string]string
@@ -41,35 +40,27 @@ type PacketPool struct {
 	ReconcileEnable   bool
 	ReconciliationCli *bridges.Bridges
 	MetricsManager    *metrics.MetricManager
-	LightClients      []string //chainName
 }
 
 const (
 	Packet           = "packet"
 	Ack              = "ack"
-	FT               = "FT"
-	DefaultRelayRate = 0.2
 )
 
-func NewPacketDBPool(db *gorm.DB, log *logrus.Logger, chain map[string]chains.BlockChain, chainMap map[string]string, reconciliationCli *bridges.Bridges, reconcileEnable bool, metricsManager *metrics.MetricManager, lightClients []string, relayRate float64) *PacketPool {
+func NewPacketDBPool(db *gorm.DB, log *logrus.Logger, chain map[string]chains.BlockChain, chainMap map[string]string, reconciliationCli *bridges.Bridges, reconcileEnable bool, metricsManager *metrics.MetricManager) *PacketPool {
 	cdc := makeCodec()
 	if err := db.AutoMigrate(&model.SyncState{}, &model.CrossPacket{}, &model.PacketRelation{}, &model.BridgeReconcileResult{}, &model.Record{}, &model.BlockReconcileResult{}, &model.CrossChainTransaction{}); err != nil {
 		panic(fmt.Errorf("db.AutoMigrate:%+v", err))
-	}
-	if relayRate == 0 {
-		relayRate = DefaultRelayRate
 	}
 	return &PacketPool{
 		Codec:             cdc,
 		DB:                db,
 		log:               log,
-		relayFate:         relayRate,
 		Chains:            chain,
 		ChainMap:          chainMap,
 		ReconcileEnable:   reconcileEnable,
 		ReconciliationCli: reconciliationCli,
 		MetricsManager:    metricsManager,
-		LightClients:      lightClients,
 	}
 }
 
@@ -78,45 +69,45 @@ var (
 	_ = chains.BlockChain(&chains.Teleport{})
 )
 
-func (PacketPool *PacketPool) SyncToDB(s *gocron.Scheduler, syncEnable bool) {
-	for chainName, chain := range PacketPool.Chains {
+func (p *PacketPool) SyncToDB(s *gocron.Scheduler, syncEnable bool) {
+	for chainName, chain := range p.Chains {
 		c := chain
 		name := chainName
 		syncState := model.SyncState{ChainName: name}
-		if err := PacketPool.DB.Model(&syncState).Find(&syncState).Error; err != nil {
-			PacketPool.log.Fatalf("get syncState error:%+v", err)
+		if err := p.DB.Model(&syncState).Find(&syncState).Error; err != nil {
+			p.log.Fatalf("get syncState error:%+v", err)
 		}
 		if chain.RevisedHeight() != 0 {
-			PacketPool.log.Infof("chain %v database sync height:%v,reset height:%v", name, syncState.Height, chain.RevisedHeight())
+			p.log.Infof("chain %v database sync height:%v,reset height:%v", name, syncState.Height, chain.RevisedHeight())
 			syncState.Height = chain.RevisedHeight()
-			if err := PacketPool.DB.Save(&syncState).Error; err != nil {
+			if err := p.DB.Save(&syncState).Error; err != nil {
 				panic(err)
 			}
 		} else if syncState.Height == 0 {
 			syncState.Height = chain.StartHeight()
-			if err := PacketPool.DB.Save(&syncState).Error; err != nil {
+			if err := p.DB.Save(&syncState).Error; err != nil {
 				panic(err)
 			}
 		}
 
 		if c.GetFrequency() <= 0 {
-			PacketPool.log.Fatalf("invalid frequency:%v", c.GetFrequency())
+			p.log.Fatalf("invalid frequency:%v", c.GetFrequency())
 		}
 		if c.GetBatchNumber() == 0 {
-			PacketPool.log.Fatalf("invalid batchNumber:%v", c.GetBatchNumber())
+			p.log.Fatalf("invalid batchNumber:%v", c.GetBatchNumber())
 		}
 		jobs, err := s.Every(c.GetFrequency()).Seconds().Do(func() {
 			defer func() {
 				if err := recover(); err != nil {
-					PacketPool.log.Errorf("syncToDB panic:%+v", err)
+					p.log.Errorf("syncToDB panic:%+v", err)
 				}
 			}()
-			if err := PacketPool.syncToDB(name, c); err != nil {
+			if err := p.syncToDB(name, c); err != nil {
 				time.Sleep(time.Second * 5)
 			}
 		})
 		if err != nil {
-			PacketPool.log.Fatalf("init jobs error:%+v", err)
+			p.log.Fatalf("init jobs error:%+v", err)
 		}
 		jobs.SingletonMode()
 	}
@@ -125,14 +116,14 @@ func (PacketPool *PacketPool) SyncToDB(s *gocron.Scheduler, syncEnable bool) {
 	}
 }
 
-func (PacketPool *PacketPool) syncToDB(name string, c chains.BlockChain) error {
+func (p *PacketPool) syncToDB(name string, c chains.BlockChain) error {
 	cn := name
 	var delayBlock uint64 = 1
 	syncState := model.SyncState{ChainName: cn}
-	if err := PacketPool.DB.Model(&syncState).Find(&syncState).Error; err != nil {
+	if err := p.DB.Model(&syncState).Find(&syncState).Error; err != nil {
 		return fmt.Errorf("get syncState error:%s", err.Error())
 	}
-	systemGauge := PacketPool.MetricsManager.Gauge.With("chain_name", cn)
+	systemGauge := p.MetricsManager.Gauge.With("chain_name", cn)
 	chainHeight, err := c.GetLatestHeight()
 	if err != nil {
 		systemGauge.With("option", "interrupt").Add(1)
@@ -140,28 +131,28 @@ func (PacketPool *PacketPool) syncToDB(name string, c chains.BlockChain) error {
 	} else {
 		systemGauge.With("option", "interrupt").Set(0)
 	}
-	PacketPool.log.Infof("chainName:%v,latestHeight:%v", cn, chainHeight)
+	p.log.Infof("chainName:%v,latestHeight:%v", cn, chainHeight)
 	if syncState.Height+delayBlock > chainHeight {
 		return fmt.Errorf("sync height :%v > chain %v Height:%v", syncState.Height, cn, chainHeight)
 	}
-	PacketPool.log.Infof("sync chain %v data,height=%v", cn, syncState.Height)
+	p.log.Infof("sync chain %v data,height=%v", cn, syncState.Height)
 	var updateHeight uint64
 	//delay 1 block
 	if chainHeight-c.GetBatchNumber()-delayBlock > syncState.Height {
 		updateHeight = syncState.Height + c.GetBatchNumber()
-		err = PacketPool.saveCrossChainPacketsByHeight(syncState.Height, syncState.Height+c.GetBatchNumber()-1, c, updateHeight)
+		err = p.saveCrossChainPacketsByHeight(syncState.Height, syncState.Height+c.GetBatchNumber()-1, c, updateHeight)
 	} else {
 		updateHeight = chainHeight - delayBlock + 1
-		err = PacketPool.saveCrossChainPacketsByHeight(syncState.Height, chainHeight-delayBlock, c, updateHeight)
+		err = p.saveCrossChainPacketsByHeight(syncState.Height, chainHeight-delayBlock, c, updateHeight)
 	}
 	if err != nil {
-		PacketPool.log.Errorf("saveCrossChainPacketsByHeight error:%s", err)
+		p.log.Errorf("saveCrossChainPacketsByHeight error:%s", err)
 		return err
 	}
 	return nil
 }
 
-func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, chain chains.BlockChain, updateHeight uint64) error {
+func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, chain chains.BlockChain, updateHeight uint64) error {
 	packets, err := chain.GetPackets(fromBlock, toBlock)
 	if err != nil {
 		return err
@@ -209,14 +200,14 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 				AmountRaw:        a.String(),
 			}
 			var crossChainTransaction model.CrossChainTransaction
-			if err := PacketPool.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
+			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
 				return err
 			}
 			var tokenName string
 			if crossChainTransaction.TokenName == "" {
-				tokenName = PacketPool.ReconciliationCli.GetTokenNameByAddress(pt.Packet.SrcChain, transferData.Token)
+				tokenName = p.ReconciliationCli.GetTokenNameByAddress(pt.Packet.SrcChain, transferData.Token)
 				if tokenName == "" {
-					PacketPool.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.Packet.SrcChain, transferData.Token, pt.Packet.DstChain, pt.Packet.Sequence)
+					p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.Packet.SrcChain, transferData.Token, pt.Packet.DstChain, pt.Packet.Sequence)
 					continue
 				}
 				crossChainTx.TokenName = tokenName
@@ -225,23 +216,23 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 			}
 			if pt.Packet.SrcChain == chains.TeleportChain {
 				key := fmt.Sprintf("%v/%v/%v", pt.Packet.SrcChain, pt.Packet.DstChain, tokenName)
-				crossChainTx.ReceiveTokenAddress = PacketPool.ReconciliationCli.BridgeTokenMap[key].ChainBToken.AddressHex()
+				crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainBToken.AddressHex()
 			} else {
 				key := fmt.Sprintf("%v/%v/%v", pt.Packet.DstChain, pt.Packet.SrcChain, tokenName)
-				crossChainTx.ReceiveTokenAddress = PacketPool.ReconciliationCli.BridgeTokenMap[key].ChainAToken.AddressHex()
+				crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainAToken.AddressHex()
 			}
 			srcChain := chain
 			packetFee, err := srcChain.GetPacketFee(pt.Packet.SrcChain, pt.Packet.DstChain, int(pt.Packet.Sequence))
 			if err != nil {
-				PacketPool.log.Errorf("GetPacketFee error:%+v", err)
+				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
 			} else {
-				PacketPool.log.Infoln("GetPacketFee:%v", packetFee)
+				p.log.Infoln("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-				decimals, err := PacketPool.ReconciliationCli.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
+				decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
 				if err != nil {
-					PacketPool.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
+					p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 					return err
 				}
 				feeBigFloat := new(big.Float).SetInt(packetFee.FeeAmount)
@@ -251,9 +242,9 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 				crossChainTx.PacketFeePaid = fee
 			}
 			if crossChainTransaction.AmountFloat == 0 {
-				teleportDecimal, otherDecimal, err := PacketPool.ReconciliationCli.GetBridgeTokenDecimals(pt.Packet.SrcChain, tokenName, pt.Packet.DstChain)
+				teleportDecimal, otherDecimal, err := p.ReconciliationCli.GetBridgeTokenDecimals(pt.Packet.SrcChain, tokenName, pt.Packet.DstChain)
 				if err != nil {
-					PacketPool.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt.Packet, Packet, pt.TxHash)
+					p.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt.Packet, Packet, pt.TxHash)
 					return err
 				}
 				var amountFloat float64
@@ -266,7 +257,7 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 					amountFloat, err = tokenAmount.Float64()
 				}
 				if err != nil {
-					PacketPool.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt.Packet)
+					p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt.Packet)
 					return err
 				}
 				amountStr := fmt.Sprintf("%.0f", amountFloat)
@@ -312,15 +303,15 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 				PacketFee:      float64(ackPacket.Gas) * ackPacket.GasPrice / math.Pow10(int(nativeDecimal)),
 			}
 			var crossChainTransaction model.CrossChainTransaction
-			if err := PacketPool.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
-				PacketPool.log.Errorf("query db error:%+v\n,where src_chain = %v and dest_chain = %v and sequence = %v", err, ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence)
+			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
+				p.log.Errorf("query db error:%+v\n,where src_chain = %v and dest_chain = %v and sequence = %v", err, ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence)
 				return err
 			}
 			var tokenName string
 			if crossChainTransaction.TokenName == "" {
-				tokenName = PacketPool.ReconciliationCli.GetTokenNameByAddress(ackPacket.Ack.Packet.SrcChain, transferData.Token)
+				tokenName = p.ReconciliationCli.GetTokenNameByAddress(ackPacket.Ack.Packet.SrcChain, transferData.Token)
 				if tokenName == "" {
-					PacketPool.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", ackPacket.Ack.Packet.SrcChain, transferData.Token, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence)
+					p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", ackPacket.Ack.Packet.SrcChain, transferData.Token, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence)
 					continue
 				}
 				crossChainTx.TokenName = tokenName
@@ -333,14 +324,14 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 			//	return err
 			//}
 			//if tokenLimit.Enable {
-			//	totalCrossAmount, err := PacketPool.ReconciliationCli.GetDestReceivedSumAmount(ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ft.Token, time.Duration(tokenLimit.TimePeriod.Uint64()))
+			//	totalCrossAmount, err := p.ReconciliationCli.GetDestReceivedSumAmount(ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ft.Token, time.Duration(tokenLimit.TimePeriod.Uint64()))
 			//	if err != nil {
 			//		return err
 			//	}
 			//	limit := new(big.Float).SetInt(tokenLimit.TimeBasedLimit)
 			//	limitFloat, _ := limit.Float64()
 			//	if totalCrossAmount > limitFloat {
-			//		PacketPool.MetricsManager.Gauge.With("chain_name", chain.ChainName()).With("option", "over_limit").Set(totalCrossAmount - limitFloat)
+			//		p.MetricsManager.Gauge.With("chain_name", chain.ChainName()).With("option", "over_limit").Set(totalCrossAmount - limitFloat)
 			//	}
 			//}
 			srcChain := chain
@@ -349,15 +340,15 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 			}
 			packetFee, err := srcChain.GetPacketFee(ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, int(ackPacket.Ack.Packet.Sequence))
 			if err != nil {
-				PacketPool.log.Errorf("GetPacketFee error:%+v", err)
+				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
 			} else {
-				PacketPool.log.Infoln("GetPacketFee:%v", packetFee)
+				p.log.Infoln("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-				decimals, err := PacketPool.ReconciliationCli.GetSingleTokenDecimals(ackPacket.Ack.Packet.SrcChain, packetFee.TokenAddress)
+				decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(ackPacket.Ack.Packet.SrcChain, packetFee.TokenAddress)
 				if err != nil {
-					PacketPool.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
+					p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 					return err
 				}
 				feeBigFloat := new(big.Float).SetInt(packetFee.FeeAmount)
@@ -367,9 +358,9 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 				crossChainTx.PacketFeePaid = fee
 			}
 			if crossChainTransaction.AmountFloat == 0 {
-				teleportDecimal, otherDecimal, err := PacketPool.ReconciliationCli.GetBridgeTokenDecimals(ackPacket.Ack.Packet.SrcChain, tokenName, ackPacket.Ack.Packet.DstChain)
+				teleportDecimal, otherDecimal, err := p.ReconciliationCli.GetBridgeTokenDecimals(ackPacket.Ack.Packet.SrcChain, tokenName, ackPacket.Ack.Packet.DstChain)
 				if err != nil {
-					PacketPool.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, ackPacket.Ack.Packet, Ack, ackPacket.TxHash)
+					p.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, ackPacket.Ack.Packet, Ack, ackPacket.TxHash)
 					return err
 				}
 				var amountFloat float64
@@ -382,7 +373,7 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 					amountFloat, err = tokenAmount.Float64()
 				}
 				if err != nil {
-					PacketPool.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, ackPacket.Ack.Packet)
+					p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, ackPacket.Ack.Packet)
 					return err
 				}
 				amountStr := fmt.Sprintf("%.0f", amountFloat)
@@ -434,21 +425,21 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 				AckGasPrice: receivedAckPacket.GasPrice,
 				AckFee:      float64(receivedAckPacket.Gas) * receivedAckPacket.GasPrice / math.Pow10(int(nativeDecimal)),
 			}
-			srcChain := PacketPool.Chains[receivedAckPacket.Ack.Packet.SrcChain]
+			srcChain := p.Chains[receivedAckPacket.Ack.Packet.SrcChain]
 			if srcChain == nil {
 				return fmt.Errorf("invalid chain,chainName:%s", receivedAckPacket.Ack.Packet.SrcChain)
 			}
 			packetFee, err := srcChain.GetPacketFee(receivedAckPacket.Ack.Packet.SrcChain, receivedAckPacket.Ack.Packet.DstChain, int(receivedAckPacket.Ack.Packet.Sequence))
 			if err != nil {
-				PacketPool.log.Errorf("GetPacketFee error:%+v", err)
+				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
 			} else {
-				PacketPool.log.Infoln("GetPacketFee:%v", packetFee)
+				p.log.Infoln("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-				decimals, err := PacketPool.ReconciliationCli.GetSingleTokenDecimals(receivedAckPacket.Ack.Packet.SrcChain, packetFee.TokenAddress)
+				decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(receivedAckPacket.Ack.Packet.SrcChain, packetFee.TokenAddress)
 				if err != nil {
-					PacketPool.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
+					p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 					return err
 				}
 				feeBigFloat := new(big.Float).SetInt(packetFee.FeeAmount)
@@ -460,13 +451,13 @@ func (PacketPool *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock u
 			crossChainTxs = append(crossChainTxs, crossChainTx)
 		}
 	}
-	if err := PacketPool.saveToDB(crossChainTxs, chain.ChainName(), updateHeight); err != nil {
+	if err := p.saveToDB(crossChainTxs, chain.ChainName(), updateHeight); err != nil {
 		return fmt.Errorf("sync transaction fail:%v", err.Error())
 	}
-	return PacketPool.reconcile(ackcrossChainTxs)
+	return p.reconcile(ackcrossChainTxs)
 }
 
-func (PacketPool *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []model.CrossChainTransaction) error {
+func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []model.CrossChainTransaction) error {
 	for _, pt := range bizPackets {
 		var transferData packettypes.TransferData
 		if err := transferData.ABIDecode(pt.Packet.TransferData); err != nil {
@@ -493,14 +484,14 @@ func (PacketPool *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossCh
 			AmountRaw:        a.String(),
 		}
 		var crossChainTransaction model.CrossChainTransaction
-		if err := PacketPool.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
+		if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
 			return err
 		}
 		var tokenName string
 		if crossChainTransaction.TokenName == "" {
-			tokenName = PacketPool.ReconciliationCli.GetTokenNameByAddress(pt.Packet.SrcChain, transferData.Token)
+			tokenName = p.ReconciliationCli.GetTokenNameByAddress(pt.Packet.SrcChain, transferData.Token)
 			if tokenName == "" {
-				PacketPool.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.Packet.SrcChain, transferData.Token, pt.Packet.DstChain, pt.Packet.Sequence)
+				p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.Packet.SrcChain, transferData.Token, pt.Packet.DstChain, pt.Packet.Sequence)
 				continue
 			}
 			crossChainTx.TokenName = tokenName
@@ -509,23 +500,23 @@ func (PacketPool *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossCh
 		}
 		if pt.Packet.SrcChain == chains.TeleportChain {
 			key := fmt.Sprintf("%v/%v/%v", pt.Packet.SrcChain, pt.Packet.DstChain, tokenName)
-			crossChainTx.ReceiveTokenAddress = PacketPool.ReconciliationCli.BridgeTokenMap[key].ChainBToken.AddressHex()
+			crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainBToken.AddressHex()
 		} else {
 			key := fmt.Sprintf("%v/%v/%v", pt.Packet.DstChain, pt.Packet.SrcChain, tokenName)
-			crossChainTx.ReceiveTokenAddress = PacketPool.ReconciliationCli.BridgeTokenMap[key].ChainAToken.AddressHex()
+			crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainAToken.AddressHex()
 		}
-		srcChain := PacketPool.Chains[pt.Packet.SrcChain]
+		srcChain := p.Chains[pt.Packet.SrcChain]
 		packetFee, err := srcChain.GetPacketFee(pt.Packet.SrcChain, pt.Packet.DstChain, int(pt.Packet.Sequence))
 		if err != nil {
-			PacketPool.log.Errorf("GetPacketFee error:%+v", err)
+			p.log.Errorf("GetPacketFee error:%+v", err)
 			return err
 		} else {
-			PacketPool.log.Infoln("GetPacketFee:%v", packetFee)
+			p.log.Infoln("GetPacketFee:%v", packetFee)
 		}
 		if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-			decimals, err := PacketPool.ReconciliationCli.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
+			decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
 			if err != nil {
-				PacketPool.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
+				p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 				return err
 			}
 			feeBigFloat := new(big.Float).SetInt(packetFee.FeeAmount)
@@ -535,9 +526,9 @@ func (PacketPool *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossCh
 			crossChainTx.PacketFeePaid = fee
 		}
 		if crossChainTransaction.AmountFloat == 0 {
-			teleportDecimal, otherDecimal, err := PacketPool.ReconciliationCli.GetBridgeTokenDecimals(pt.Packet.SrcChain, tokenName, pt.Packet.DstChain)
+			teleportDecimal, otherDecimal, err := p.ReconciliationCli.GetBridgeTokenDecimals(pt.Packet.SrcChain, tokenName, pt.Packet.DstChain)
 			if err != nil {
-				PacketPool.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt.Packet, Packet, pt.TxHash)
+				p.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt.Packet, Packet, pt.TxHash)
 				return err
 			}
 			var amountFloat float64
@@ -550,7 +541,7 @@ func (PacketPool *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossCh
 				amountFloat, err = tokenAmount.Float64()
 			}
 			if err != nil {
-				PacketPool.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt.Packet)
+				p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt.Packet)
 				return err
 			}
 			amountStr := fmt.Sprintf("%.0f", amountFloat)
@@ -566,11 +557,11 @@ func (PacketPool *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossCh
 	return nil
 }
 
-func (PacketPool *PacketPool) syncPacketByHash(chainName, txHash string) ([]model.CrossChainTransaction, error) {
+func (p *PacketPool) syncPacketByHash(chainName, txHash string) ([]model.CrossChainTransaction, error) {
 	var (
 		crossChainTxs []model.CrossChainTransaction
 	)
-	chain := PacketPool.Chains[chainName]
+	chain := p.Chains[chainName]
 	if chain == nil {
 		return nil, fmt.Errorf("invalid chainName")
 	}
@@ -579,10 +570,10 @@ func (PacketPool *PacketPool) syncPacketByHash(chainName, txHash string) ([]mode
 	if err != nil {
 		return nil, err
 	}
-	if err := PacketPool.HandlePacket(bizPackets, crossChainTxs); err != nil {
+	if err := p.HandlePacket(bizPackets, crossChainTxs); err != nil {
 		return nil, err
 	}
-	if err := PacketPool.DB.Transaction(func(tx *gorm.DB) error {
+	if err := p.DB.Transaction(func(tx *gorm.DB) error {
 		for _, cctx := range crossChainTxs {
 			var ccTransaction model.CrossChainTransaction
 			if err := tx.Where("src_chain = ? and dest_chain = ? and sequence = ? ", cctx.SrcChain, cctx.DestChain, cctx.Sequence).First(&ccTransaction).Error; err != nil {
@@ -591,10 +582,10 @@ func (PacketPool *PacketPool) syncPacketByHash(chainName, txHash string) ([]mode
 						continue
 					}
 					if err := tx.Create(&cctx).Error; err != nil {
-						PacketPool.log.Errorf("create CrossChainTransaction  error!!!,result:%+v", cctx)
+						p.log.Errorf("create CrossChainTransaction  error!!!,result:%+v", cctx)
 						return err
 					}
-					PacketPool.log.Infof("CrossChainTransaction create success!!!,result:%+v", cctx)
+					p.log.Infof("CrossChainTransaction create success!!!,result:%+v", cctx)
 					continue
 				} else {
 					return err
@@ -606,10 +597,10 @@ func (PacketPool *PacketPool) syncPacketByHash(chainName, txHash string) ([]mode
 					cctx.Status = ccTransaction.Status
 				}
 				if err := tx.Updates(&cctx).Error; err != nil {
-					PacketPool.log.Errorf("Update CrossChainTransaction  error!!!,result:%+v", cctx)
+					p.log.Errorf("Update CrossChainTransaction  error!!!,result:%+v", cctx)
 					return err
 				}
-				PacketPool.log.Infof("Update CrossChainTransaction  success!!!,result:%+v", cctx)
+				p.log.Infof("Update CrossChainTransaction  success!!!,result:%+v", cctx)
 			}
 		}
 		return nil
@@ -619,20 +610,20 @@ func (PacketPool *PacketPool) syncPacketByHash(chainName, txHash string) ([]mode
 	return crossChainTxs, nil
 }
 
-func (PacketPool *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransaction, name string, updateHeight uint64) error {
-	return PacketPool.DB.Transaction(func(tx *gorm.DB) error {
+func (p *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransaction, name string, updateHeight uint64) error {
+	return p.DB.Transaction(func(tx *gorm.DB) error {
 		for _, cctx := range crossChainTxs {
 			var ccTransaction model.CrossChainTransaction
 			if err := tx.Where("src_chain = ? and dest_chain = ? and sequence = ? ", cctx.SrcChain, cctx.DestChain, cctx.Sequence).First(&ccTransaction).Error; err != nil {
 				if err == gorm.ErrRecordNotFound {
 					if err := tx.Create(&cctx).Error; err != nil {
-						PacketPool.log.Errorf("create CrossChainTransaction  error!!!,result:%+v", cctx)
+						p.log.Errorf("create CrossChainTransaction  error!!!,result:%+v", cctx)
 						return err
 					}
-					PacketPool.log.Infof("CrossChainTransaction create success!!!,result:%+v", cctx)
+					p.log.Infof("CrossChainTransaction create success!!!,result:%+v", cctx)
 					continue
 				} else {
-					PacketPool.log.Errorf("tx.Where error:%+v", err)
+					p.log.Errorf("tx.Where error:%+v", err)
 					return err
 				}
 			}
@@ -642,25 +633,25 @@ func (PacketPool *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransacti
 					cctx.Status = ccTransaction.Status
 				}
 				if err := tx.Updates(&cctx).Error; err != nil {
-					PacketPool.log.Errorf("Update CrossChainTransaction  error!!!,result:%+v", cctx)
+					p.log.Errorf("Update CrossChainTransaction  error!!!,result:%+v", cctx)
 					return err
 				}
-				PacketPool.log.Infof("Update CrossChainTransaction  success!!!,result:%+v", cctx)
+				p.log.Infof("Update CrossChainTransaction  success!!!,result:%+v", cctx)
 			}
 		}
 		if err := tx.Updates(&model.SyncState{ChainName: name, Height: updateHeight}).Error; err != nil {
 			return err
 		}
-		PacketPool.log.Infoln("tx.Updates success,sync state:", model.SyncState{ChainName: name, Height: updateHeight})
+		p.log.Infoln("tx.Updates success,sync state:", model.SyncState{ChainName: name, Height: updateHeight})
 		return nil
 	})
 }
 
-func (PacketPool *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) error {
-	if PacketPool.ReconcileEnable {
+func (p *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) error {
+	if p.ReconcileEnable {
 		for _, ackCrossChainTx := range ackcrossChainTxs {
 			var crossChainTx model.CrossChainTransaction
-			if err := PacketPool.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackCrossChainTx.SrcChain, ackCrossChainTx.DestChain, ackCrossChainTx.Sequence).Find(&crossChainTx).Error; err != nil {
+			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackCrossChainTx.SrcChain, ackCrossChainTx.DestChain, ackCrossChainTx.Sequence).Find(&crossChainTx).Error; err != nil {
 				return err
 			}
 			packetA := bridges.ReconciliationPacket{
@@ -685,7 +676,7 @@ func (PacketPool *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTrans
 				otherPacket = packetA
 			}
 			if crossChainTx.SrcHeight != 0 && crossChainTx.DestHeight != 0 {
-				bridgeReconcileResult, err := PacketPool.ReconciliationCli.Reconcile(teleportPacket, otherPacket)
+				bridgeReconcileResult, err := p.ReconciliationCli.Reconcile(teleportPacket, otherPacket)
 				if err != nil {
 					return err
 				}
@@ -706,8 +697,8 @@ func (PacketPool *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTrans
 					crossChainTransaction.DestAmount = bridgeReconcileResult.SrcAmount
 					crossChainTransaction.DestTrimAmount = bridgeReconcileResult.SrcTrimAmount
 				}
-				if err := PacketPool.DB.Updates(&crossChainTransaction).Error; err != nil {
-					PacketPool.log.Errorf("update Reconcile result error:%+v", err)
+				if err := p.DB.Updates(&crossChainTransaction).Error; err != nil {
+					p.log.Errorf("update Reconcile result error:%+v", err)
 					return err
 				}
 			}
@@ -716,20 +707,6 @@ func (PacketPool *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTrans
 	return nil
 }
 
-//func (PacketPool *PacketPool) parseDataList(dataList [][]byte, ports []string) (*transfertypes.FungibleTokenPacketData, error) {
-//	if len(dataList) != len(ports) {
-//		return nil, fmt.Errorf("dataList length != ports length")
-//	}
-//	var ft transfertypes.FungibleTokenPacketData
-//	for i, port := range ports {
-//		if port == FT {
-//			if err := ft.DecodeBytes(dataList[i]); err != nil {
-//				return nil, err
-//			}
-//		}
-//	}
-//	return &ft, nil
-//}
 
 func getStatus(ack packettypes.Acknowledgement) (model.PacketStatus, string) {
 	var status model.PacketStatus

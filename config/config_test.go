@@ -17,5 +17,4 @@ func TestLoadConfigs(t *testing.T) {
 		},
 	})
 	require.True(t, cfg.MysqlAddr != "")
-	require.True(t, len(cfg.FreeChains) == 2)
 }

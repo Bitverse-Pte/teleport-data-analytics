@@ -67,7 +67,7 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 	cs[cfg.Teleport.ChainName] = teleChain
 	metricsManager := metrics.NewMetricManager()
 	reconciliationCli := bridges.NewBridge(log, db, datas.Bridges, chainCliMap)
-	pool := packet.NewPacketDBPool(db, log, cs, chainMap, reconciliationCli, cfg.ReconcileEnable, metricsManager, cfg.LightClients, cfg.RelayRate)
+	pool := packet.NewPacketDBPool(db, log, cs, chainMap, reconciliationCli, cfg.ReconcileEnable, metricsManager)
 	monitoringSrv := monitoring.NewMonitoring(log, metricsManager, balanceMonitorings, cs, db)
 	monitoringSrv.Monitoring(scheduler)
 	return &PacketService{

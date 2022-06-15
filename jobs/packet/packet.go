@@ -12,9 +12,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/teleport-network/teleport-data-analytics/chains"
+	"github.com/teleport-network/teleport-data-analytics/jobs/bridges"
 	"github.com/teleport-network/teleport-data-analytics/metrics"
 	"github.com/teleport-network/teleport-data-analytics/model"
-	"github.com/teleport-network/teleport-data-analytics/jobs/bridges"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -43,8 +43,8 @@ type PacketPool struct {
 }
 
 const (
-	Packet           = "packet"
-	Ack              = "ack"
+	Packet = "packet"
+	Ack    = "ack"
 )
 
 func NewPacketDBPool(db *gorm.DB, log *logrus.Logger, chain map[string]chains.BlockChain, chainMap map[string]string, reconciliationCli *bridges.Bridges, reconcileEnable bool, metricsManager *metrics.MetricManager) *PacketPool {
@@ -172,12 +172,8 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				continue
 			}
 			var transferData packettypes.TransferData
-			if pt.Packet.TransferData == nil {
-				if err := transferData.ABIDecode(pt.Packet.TransferData); err != nil {
-					return err
-				}
-			}else {
-				return nil
+			if err := transferData.ABIDecode(pt.Packet.TransferData); err != nil {
+				return err
 			}
 			a := big.Int{}
 			amount := a.SetBytes(transferData.Amount)
@@ -381,9 +377,9 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				crossChainTx.Amount = amountStr
 				crossChainTx.AmountFloat = amountFloat
 			}
-			var callData  packettypes.CallData
+			var callData packettypes.CallData
 			if ackPacket.Ack.Packet.CallData == nil {
-				if err := callData.ABIDecode(ackPacket.Ack.Packet.CallData);err != nil {
+				if err := callData.ABIDecode(ackPacket.Ack.Packet.CallData); err != nil {
 					return err
 				}
 				if callData.ContractAddress == chains.AgentContract {
@@ -706,7 +702,6 @@ func (p *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) e
 	}
 	return nil
 }
-
 
 func getStatus(ack packettypes.Acknowledgement) (model.PacketStatus, string) {
 	var status model.PacketStatus

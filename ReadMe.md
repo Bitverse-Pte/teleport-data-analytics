@@ -1,8 +1,5 @@
 # teleport-data-analytics
 
-## relation chart
-![avatar](bridge-backend.png)
-
 ## Run
 
 ```bash
@@ -14,17 +11,3 @@ teleport-data-analytics start -c config.toml
 
 default port: 8080
 
-### APIs
-
-* Get all chains
-  > GET /bridge/chains
-* Get counterparty chains
-  > GET /bridge/counterpartyChains/{chainId}
-* Get tokens with two chains
-  > GET /bridge/bridges/{srcChainId}/{destChainId}
-* Get cross chain history
-  > Post /bridge/packet/history
-* Get start sync
-  > Post /bridge/packet/sync/start
-* Get start sync
-  > Post /bridge/packet/sync/start

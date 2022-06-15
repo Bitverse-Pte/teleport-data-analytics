@@ -1,0 +1,125 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Chain List",
+    "definitions": {
+        "EvmChains": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "standard": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "url",
+                "standard"
+            ]
+        },
+        "Chain": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "chain": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "rpc": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "faucets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nativeCurrency": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "symbol": {
+                            "type": "string"
+                        },
+                        "decimals": {
+                            "type": "integer"
+                        }
+                    },
+                    "required": [
+                        "name",
+                        "symbol",
+                        "decimals"
+                    ]
+                },
+                "infoURL": {
+                    "type": "string"
+                },
+                "shortName": {
+                    "type": "string"
+                },
+                "chainId": {
+                    "type": "integer"
+                },
+                "networkId": {
+                    "type": "integer"
+                },
+                "slip44": {
+                    "type": "integer"
+                },
+                "ens": {
+                    "type": "object",
+                    "properties": {
+                        "registry": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "registry"
+                    ]
+                },
+                "explorers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Explorer"
+                    }
+                }
+            },
+            "required": [
+                "name",
+                "chain",
+                "rpc",
+                "nativeCurrency",
+                "infoURL",
+                "shortName",
+                "chainId",
+                "networkId",
+                "explorers"
+            ]
+        }
+    },
+    "type": "object",
+    "properties": {
+        "chains": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Chain"
+            }
+        }
+    },
+    "required": [
+        "chains"
+    ]
+}

@@ -1,0 +1,88 @@
+{
+    "chains": [
+        {
+            "chainId": "theta-testnet-001",
+            "chainName": "Cosmos Theta Testnet",
+            "rpc": "https://rpc.sentry-02.theta-testnet.polypore.xyz/",
+            "rest": "https://rest.sentry-02.theta-testnet.polypore.xyz/",
+            "stakeCurrency": {
+                "coinDenom": "ATOM",
+                "coinMinimalDenom": "uatom",
+                "coinDecimals": "6"
+            },
+            "bip44": {
+                "coinType": "118"
+            },
+            "bech32Config": {
+                "bech32PrefixAccAddr": "cosmos",
+                "bech32PrefixAccPub": "cosmospub",
+                "bech32PrefixValAddr": "cosmosvaloper",
+                "bech32PrefixValPub": "cosmosvaloperpub",
+                "bech32PrefixConsAddr": "cosmosvalcons",
+                "bech32PrefixConsPub": "cosmosvalconspub"
+            },
+            "currencies": [
+                {
+                    "coinDenom": "ATOM",
+                    "coinMinimalDenom": "uatom",
+                    "coinDecimals": "6"
+                }
+            ],
+            "feeCurrencies": [
+                {
+                    "coinDenom": "ATOM",
+                    "coinMinimalDenom": "uatom",
+                    "coinDecimals": "6"
+                }
+            ],
+            "coinType": "118",
+            "gasPriceStep": {
+                "low": "0.005",
+                "average": "0.025",
+                "high": "0.04"
+            }
+        },
+        {
+            "chainId": "teleport_7001-1",
+            "chainName": "Teleport QA Testnet",
+            "rpc": "http://abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:26657",
+            "rest": "http://abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:1317",
+            "stakeCurrency": {
+                "coinDenom": "TELE",
+                "coinMinimalDenom": "atele",
+                "coinDecimals": "18"
+            },
+            "bip44": {
+                "coinType": "60"
+            },
+            "bech32Config": {
+                "bech32PrefixAccAddr": "teleport",
+                "bech32PrefixAccPub": "teleportpub",
+                "bech32PrefixValAddr": "teleportvaloper",
+                "bech32PrefixValPub": "teleportvaloperpub",
+                "bech32PrefixConsAddr": "teleportvalcons",
+                "bech32PrefixConsPub": "teleportvalconspub"
+            },
+            "currencies": [
+                {
+                    "coinDenom": "TELE",
+                    "coinMinimalDenom": "atele",
+                    "coinDecimals": "18"
+                }
+            ],
+            "feeCurrencies": [
+                {
+                    "coinDenom": "TELE",
+                    "coinMinimalDenom": "atele",
+                    "coinDecimals": "18"
+                }
+            ],
+            "coinType": "60",
+            "gasPriceStep": {
+                "low": "0.005",
+                "average": "0.025",
+                "high": "0.04"
+            }
+        }
+    ]
+}

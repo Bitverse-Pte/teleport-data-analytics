@@ -1,0 +1,75 @@
+MysqlAddr = "root:123456@tcp(127.0.0.1:3306)/backend?charset=utf8mb4&parseTime=True&loc=Local"
+ServerUrl = ""
+SyncEnable = true
+Network = "qanet"
+DBModel = "debug"
+Reloadperiod = 300000000000
+FreeChains = ["teleport","cosmos-hub"]
+[TokenMap]
+[TokenMap.tele]
+TokenName = 'busd'
+Coefficient = 2
+
+
+[Teleport]
+ChainID = "teleport_7001-1"
+ChainName = "teleport"
+Url = "10.41.20.10:9090"
+Frequency = 5
+BatchNumber = 100
+RevisedHeight = 43098
+AgentAddr  = "0x0000000000000000000000000000000040000001"
+
+[[EvmChains]]
+ChainID = "4"
+ChainName = "rinkeby"
+EthUrl = "https://rinkeby.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"
+PacketContract = "0xfb75fdc26b66127b491147628a3bd66afb556789"
+PacketTopic = "PacketSent((uint64,string,string,string,string[],bytes[]))"
+AckTopic = "AckWritten((uint64,string,string,string,string[],bytes[]),bytes)"
+Frequency = 15
+BatchNumber = 100
+ProxyAddr  = "0x65028919fc9241d53d1e6af7a26d569661bd72d6"
+ProxyTopic = "SendEvent(bytes,string,string,uint256)"
+[[EvmChains.BalanceMonitorings]]
+TokenName = "eth"
+AddressHex = "0x0000000000000000000000000000000000000000"
+[[EvmChains.BalanceMonitorings.Accounts]]
+AddressHex = "0x000"
+Name = "relayer"
+
+[[EvmChains]]
+ChainID = "97"
+ChainName = "bsc"
+Network = "bsc"
+EthUrl = "https://data-seed-prebsc-1-s1.binance.org:8545"
+PacketContract = "0xf8d6c8920ce142cd303ee877a9bff82281af3889"
+PacketTopic = "PacketSent((uint64,string,string,string,string[],bytes[]))"
+AckTopic = "AckWritten((uint64,string,string,string,string[],bytes[]),bytes)"
+Frequency = 5
+BatchNumber = 100
+ProxyAddr  = "0x1ec663c76e4b3de0307223fa4f702e68723816b0"
+ProxyTopic = "SendEvent(bytes,string,string,uint256)"
+
+[[EvmChains]]
+ChainID = "7001"
+ChainName = "teleport-evm"
+EthUrl = "http://10.41.20.10:8545"
+Frequency = 5
+BatchNumber = 100
+AgentAddr  = "0x0000000000000000000000000000000040000001"
+AgentTopic = "SendEvent(bytes,string,string,uint256)"
+
+[[EvmChains]]
+ChainID = "421611"
+ChainName = "arbitrum"
+EthUrl = "https://rinkeby.arbitrum.io/rpc"
+PacketContract = "0x412bf11620bb0d5dd7720b7bf00277a128da331b"
+PacketTopic = "PacketSent((uint64,string,string,string,string[],bytes[]))"
+AckTopic = "AckWritten((uint64,string,string,string,string[],bytes[]),bytes)"
+Frequency = 5
+BatchNumber = 100
+ProxyAddr  = ""
+ProxyTopic = "SendEvent(bytes,string,string,uint256)"
+RevisedHeight = 43098
+

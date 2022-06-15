@@ -1,0 +1,54 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Bridge List",
+    "definitions": {
+        "Token": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "srcToken": {
+                    "type": "string"
+                },
+                "destToken": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "srcToken",
+                "destToken"
+            ]
+        },
+        "Bridge": {
+            "type": "object",
+            "properties": {
+                "srcChain": {
+                    "type": "string"
+                },
+                "destChain": {
+                    "type": "string"
+                },
+                "tokens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Token"
+                    }
+                }
+            }
+        }
+    },
+    "type": "object",
+    "properties": {
+        "bridges": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Bridge"
+            }
+        }
+    },
+    "required": [
+        "bridges"
+    ]
+}

@@ -1,0 +1,123 @@
+{
+    "chains": [
+        {
+            "name": "Rinkeby",
+            "title": "Ethereum Testnet Rinkeby",
+            "chain": "ETH",
+            "icon": "https://static-files.teleport.network/logo/ether_logo.png",
+            "rpc": [
+                "https://rinkeby.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+                "wss://rinkeby.infura.io/ws/v3/${INFURA_API_KEY}"
+            ],
+            "faucets": [
+                "http://fauceth.komputing.org?chain=4&address=${ADDRESS}",
+                "https://faucet.rinkeby.io"
+            ],
+            "nativeCurrency": {
+                "name": "Rinkeby Ether",
+                "symbol": "RIN",
+                "decimals": 18
+            },
+            "infoURL": "https://www.rinkeby.io",
+            "shortName": "Rinkeby",
+            "chainId": 4,
+            "networkId": 4,
+            "ens": {
+                "registry": "0xe7410170f87102df0055eb195163a03b7f2bff4a"
+            },
+            "explorers": [
+                {
+                    "name": "etherscan-rinkeby",
+                    "url": "https://rinkeby.etherscan.io",
+                    "standard": "EIP3091"
+                }
+            ]
+        },
+        {
+            "name": "Bsc Testnet",
+            "title": "Bsc test net",
+            "chain": "BSC",
+            "icon": "https://static-files.teleport.network/logo/bsc_logo.png",
+            "rpc": [
+                "https://data-seed-prebsc-1-s1.binance.org:8545"
+            ],
+            "faucets": [
+                "https://testnet.binance.org/faucet-smart",
+                ""
+            ],
+            "nativeCurrency": {
+                "name": "Bsc",
+                "symbol": "bnb",
+                "decimals": 18
+            },
+            "infoURL": "",
+            "shortName": "Bsc Testnet",
+            "chainId": 97,
+            "networkId": 97,
+            "ens": {
+                "registry": ""
+            },
+            "explorers": [
+                {
+                    "name": "Bscscan Testnet",
+                    "url": "https://testnet.bscscan.com",
+                    "standard": ""
+                }
+            ]
+        },
+        {
+            "name": "Teleport Testnet",
+            "title": "Teleport Testnet",
+            "chain": "Teleport",
+            "rpc": [
+                "https://teleport-localvalidator.qa.davionlabs.com/"
+            ],
+            "faucets": [],
+            "nativeCurrency": {
+                "name": "tele",
+                "symbol": "tele",
+                "decimals": 18
+            },
+            "infoURL": "https://github.com/teleport-network",
+            "shortName": "Teleport Testnet",
+            "chainId": 7001,
+            "networkId": 7001,
+            "icon": "https://static-files.teleport.network/logo/teleport_logo.png",
+            "explorers": [
+                {
+                    "name": "Teleport testnet EVM Explorer (Blockscout)",
+                    "url": "https://blockscout.qa.davionlabs.com/",
+                    "standard": "none",
+                    "icon": "https://static-files.teleport.network/logo/teleport_logo.png"
+                }
+            ]
+        },
+        {
+            "name": "Arbitrum Testnet",
+            "title": "Arbitrum Testnet",
+            "chain": "Arbitrum",
+            "rpc": [
+                "https://rinkeby.arbitrum.io/rpc"
+            ],
+            "faucets": [],
+            "nativeCurrency": {
+                "name": "eth",
+                "symbol": "eth",
+                "decimals": 18
+            },
+            "infoURL": "",
+            "shortName": "Arbitrum Testnet",
+            "chainId": 421611,
+            "networkId": 421611,
+            "icon": "",
+            "explorers": [
+                {
+                    "name": "",
+                    "url": "https://rinkeby-explorer.arbitrum.io/#/",
+                    "standard": "none",
+                    "icon": "https://static-files.teleport.network/logo/arbitrum_logo.svg"
+                }
+            ]
+        }
+    ]
+}

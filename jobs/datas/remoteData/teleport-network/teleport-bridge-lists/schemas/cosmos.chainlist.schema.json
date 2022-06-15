@@ -1,0 +1,180 @@
+{
+    "$schema": "http://json-schema.org/draft-06/schema#",
+    "$ref": "#/definitions/Welcome1",
+    "definitions": {
+        "CosmosChains": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "chains": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Chain"
+                    }
+                }
+            },
+            "required": [
+                "chains"
+            ],
+            "title": "Welcome1"
+        },
+        "Chain": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "chainId": {
+                    "type": "string"
+                },
+                "chainName": {
+                    "type": "string"
+                },
+                "rpc": {
+                    "type": "string",
+                    "format": "uri",
+                    "qt-uri-protocols": [
+                        "http"
+                    ]
+                },
+                "rest": {
+                    "type": "string",
+                    "format": "uri",
+                    "qt-uri-protocols": [
+                        "http"
+                    ]
+                },
+                "stakeCurrency": {
+                    "$ref": "#/definitions/Currency"
+                },
+                "bip44": {
+                    "$ref": "#/definitions/Bip44"
+                },
+                "bech32Config": {
+                    "$ref": "#/definitions/Bech32Config"
+                },
+                "currencies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Currency"
+                    }
+                },
+                "feeCurrencies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Currency"
+                    }
+                },
+                "coinType": {
+                    "type": "string",
+                    "format": "integer"
+                },
+                "gasPriceStep": {
+                    "$ref": "#/definitions/GasPriceStep"
+                }
+            },
+            "required": [
+                "bech32Config",
+                "bip44",
+                "chainId",
+                "chainName",
+                "coinType",
+                "currencies",
+                "feeCurrencies",
+                "gasPriceStep",
+                "rest",
+                "rpc",
+                "stakeCurrency"
+            ],
+            "title": "Chain"
+        },
+        "Bech32Config": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "bech32PrefixAccAddr": {
+                    "type": "string"
+                },
+                "bech32PrefixAccPub": {
+                    "type": "string"
+                },
+                "bech32PrefixValAddr": {
+                    "type": "string"
+                },
+                "bech32PrefixValPub": {
+                    "type": "string"
+                },
+                "bech32PrefixConsAddr": {
+                    "type": "string"
+                },
+                "bech32PrefixConsPub": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "bech32PrefixAccAddr",
+                "bech32PrefixAccPub",
+                "bech32PrefixConsAddr",
+                "bech32PrefixConsPub",
+                "bech32PrefixValAddr",
+                "bech32PrefixValPub"
+            ],
+            "title": "Bech32Config"
+        },
+        "Bip44": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "coinType": {
+                    "type": "string",
+                    "format": "integer"
+                }
+            },
+            "required": [
+                "coinType"
+            ],
+            "title": "Bip44"
+        },
+        "Currency": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "coinDenom": {
+                    "type": "string"
+                },
+                "coinMinimalDenom": {
+                    "type": "string"
+                },
+                "coinDecimals": {
+                    "type": "string",
+                    "format": "integer"
+                }
+            },
+            "required": [
+                "coinDecimals",
+                "coinDenom",
+                "coinMinimalDenom"
+            ],
+            "title": "Currency"
+        },
+        "GasPriceStep": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "low": {
+                    "type": "string"
+                },
+                "average": {
+                    "type": "string"
+                },
+                "high": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "average",
+                "high",
+                "low"
+            ],
+            "title": "GasPriceStep"
+        }
+    }
+}

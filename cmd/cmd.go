@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 	"github.com/teleport-network/teleport-data-analytics/jobs"
 	"github.com/teleport-network/teleport-data-analytics/version"
+	"net/http"
 	"os"
 	"time"
 
@@ -41,7 +44,11 @@ func Run() {
 	cfg := config.LoadConfigs()
 	scheduler := gocron.NewScheduler(time.UTC)
 	pktSrv := jobs.NewPacketService(scheduler, cfg)
-	//go pktSrv.PktPool.UpdateNoMutilIdData()
 	pktSrv.PktPool.SyncToDB(scheduler, cfg.SyncEnable)
-	scheduler.StartBlocking()
+	scheduler.StartAsync()
+	metricMux := http.NewServeMux()
+	metricMux.Handle("/metrics", promhttp.Handler())
+	if err := http.ListenAndServe(":3030", metricMux);err != nil {
+		logrus.Fatal(err)
+	}
 }

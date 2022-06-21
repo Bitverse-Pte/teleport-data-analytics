@@ -194,6 +194,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				SendTxTime:       pt.TimeStamp,
 				SrcHeight:        pt.Height,
 				AmountRaw:        a.String(),
+				MultiID2:         pt.MultiId,
 			}
 			var crossChainTransaction model.CrossChainTransaction
 			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
@@ -297,6 +298,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				PacketGas:      float64(ackPacket.Gas),
 				PacketGasPrice: ackPacket.GasPrice,
 				PacketFee:      float64(ackPacket.Gas) * ackPacket.GasPrice / math.Pow10(int(nativeDecimal)),
+				MultiID1:       ackPacket.MultiId,
 			}
 			var crossChainTransaction model.CrossChainTransaction
 			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
@@ -314,22 +316,6 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 			} else {
 				tokenName = crossChainTransaction.TokenName
 			}
-
-			//tokenLimit, err := chain.GetTokenLimit(common.HexToAddress(ft.Token), big.NewInt(int64(ackPacket.Height)))
-			//if err != nil {
-			//	return err
-			//}
-			//if tokenLimit.Enable {
-			//	totalCrossAmount, err := p.ReconciliationCli.GetDestReceivedSumAmount(ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ft.Token, time.Duration(tokenLimit.TimePeriod.Uint64()))
-			//	if err != nil {
-			//		return err
-			//	}
-			//	limit := new(big.Float).SetInt(tokenLimit.TimeBasedLimit)
-			//	limitFloat, _ := limit.Float64()
-			//	if totalCrossAmount > limitFloat {
-			//		p.MetricsManager.Gauge.With("chain_name", chain.ChainName()).With("option", "over_limit").Set(totalCrossAmount - limitFloat)
-			//	}
-			//}
 			srcChain := chain
 			if srcChain == nil {
 				return fmt.Errorf("invalid chain,chainName:%s", ackPacket.Ack.Packet.SrcChain)
@@ -376,15 +362,6 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				amountFloat, _ = strconv.ParseFloat(amountStr, 64)
 				crossChainTx.Amount = amountStr
 				crossChainTx.AmountFloat = amountFloat
-			}
-			var callData packettypes.CallData
-			if ackPacket.Ack.Packet.CallData == nil {
-				if err := callData.ABIDecode(ackPacket.Ack.Packet.CallData); err != nil {
-					return err
-				}
-				if callData.ContractAddress == chains.AgentContract {
-					crossChainTx.MultiID1 = ackPacket.MultiId
-				}
 			}
 			crossChainTxs = append(crossChainTxs, crossChainTx)
 			ackcrossChainTxs = append(ackcrossChainTxs, crossChainTx)

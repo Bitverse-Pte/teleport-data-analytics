@@ -17,7 +17,8 @@ var (
 	proxyTopic  = "SendEvent(bytes,string,string,uint256)"
 	agentAddr   = "0x0000000000000000000000000000000040000001"
 	agentTopic  = "SendEvent(bytes,string,string,uint256)"
-	packetTopic = "PacketSent((uint64,string,string,string,string[],bytes[]))"
+	packetTopic = "PacketSent(bytes)"
+	ackTopic    = "AckWritten((string,string,uint64,string,bytes,bytes,string,uint64),bytes)"
 )
 
 func TestEth_GetMultiInfo2(t *testing.T) {
@@ -150,14 +151,43 @@ func TestTeleport_GetMultiInfo(t *testing.T) {
 		EvmUrl:         "http://abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:8545",
 		ChainName:      "teleport",
 		ChainID:        "7001",
-		PacketContract: "0xc7b952b46a1115a51b7395ca3b7f473c6b37befe",
-		EndPointAddr:   "0x",
+		PacketContract: "0x0000000000000000000000000000000020000001",
+		PacketTopic:    packetTopic,
+		AckTopic:       ackTopic,
+		EndPointAddr:   "0x0000000000000000000000000000000020000002",
 		AgentAddr:      agentAddr,
 		AgentTopic:     agentTopic,
 	}
-	_, err := NewEvmCli(cfg)
+	ethcli, err := NewEvmCli(cfg)
 	require.NoError(t, err)
-
+	//packets, err := ethcli.getAckPackets(1180875, 1180875)
+	//fmt.Println(packets)
+	tendermintCfg := config.TendermintConfig{
+		Url:       "abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:9090",
+		ChainName: "teleport",
+		ChainID:   "teleport_7001_1",
+		AgentAddr: "0x0000000000000000000000000000000040000001",
+		Frequency: 1,
+		// Refer to block generation speed
+		BatchNumber:        1,
+		RevisedHeight:      1,
+		StartHeight:        1,
+		BalanceMonitorings: nil,
+	}
+	teleCli, err := NewTeleport(tendermintCfg, ethcli)
+	if err != nil {
+		fmt.Println(err)
+	}
+	packets, err := teleCli.GetPackets(1180875, 1180875)
+	fmt.Println("packets1:", packets[0].BizPackets[0].MultiId)
+	fmt.Println("packets2:", packets[0].AckPackets[0].MultiId)
+	//var transferData  packettypes.TransferData
+	//transferData.ABIDecode(packets[0].Packet.TransferData)
+	//fmt.Println("receiver:",transferData.Receiver)
+	//fee, err := ethcli.GetPacketFee("teleport", "rinkeby", 15)
+	//fmt.Println(fee)
+	//mutilPacket,err := ethcli.GetPacketsByHash("fd496fd20daa9e4d8ecc6efe73b31cd9ab4a7dae81153aa5baf453c172fe6e87")
+	//fmt.Println(mutilPacket)
 }
 
 func TestEth_GetHeightByHash(t *testing.T) {
@@ -197,23 +227,19 @@ func TestEth_GetPacket(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	packets, err := ethcli.getPackets(10848088, 10848088)
+	packets, err := ethcli.getAckPackets(10855039, 10859741)
 	if err != nil {
 		fmt.Printf("%+v", err)
 	}
-	fmt.Println(packets)
-
-	packets, err := ethcli.GetPacketsByHash("0x0f68049c46c6d7a6b114da75dc81d1ec39643ae8e678a8ab235575d4a31c6663")
-	if err != nil {
-		fmt.Printf("%+v", err)
+	for _, packet := range packets {
+		if packet.Ack.Packet.SrcChain == "teleport" && packet.Ack.Packet.DstChain == "rinkeby" && packet.Ack.Packet.Sequence == 15 {
+			fmt.Println(packet.Height)
+		}
 	}
-	fmt.Println(packets)
-	//packetJson, _ := json.Marshal(&packets[0].Packet)
-	//b, err := tools.HttpGet(fmt.Sprintf("https://bridge.qa.davionlabs.com/bridge/status?packet=%s", string(packetJson)), nil)
+	//packets, err := ethcli.GetPacketsByHash("0x0f68049c46c6d7a6b114da75dc81d1ec39643ae8e678a8ab235575d4a31c6663")
 	//if err != nil {
-	//	fmt.Println("get err:", err)
+	//	fmt.Printf("%+v", err)
 	//}
-	//fmt.Println("resp", string(b))
 
 }
 

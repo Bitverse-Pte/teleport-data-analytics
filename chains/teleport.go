@@ -50,7 +50,7 @@ func NewTeleport(cfg config.TendermintConfig, evmCli BlockChain) (*Teleport, err
 	cdc := makeCodec()
 	cli, err := client.NewClient(cfg.Url, cfg.ChainID)
 	if err != nil {
-		panic(fmt.Errorf("NewTeleport err:%+v",err))
+		panic(fmt.Errorf("NewTeleport err:%+v", err))
 	}
 	evm, ok := evmCli.(*Evm)
 	if !ok {
@@ -241,7 +241,6 @@ func (t *Teleport) GetBlockPackets(height uint64) (*BlockPackets, error) {
 			tmpPackets[i].Height = height
 			// Avoid parsing whenever possible
 			if len(tmpPackets) > 1 {
-
 				if tmpPackets[i].Packet.Sender == t.evm.agentAddr {
 					tmpPackets[i].MultiId = fmt.Sprintf("%v/%v", hash, packetId)
 					packetId++

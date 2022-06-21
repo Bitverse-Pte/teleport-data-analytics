@@ -31,9 +31,9 @@ func NewTokenQuery(eth *Evm, addressHex, tokenName string) TokenQuery {
 	}
 	decimals, err := tQuery.GetDecimals()
 	if err != nil {
-		panic(fmt.Errorf("NewTokenQuery error:%+v\n,chainName:%v,addressHex:%v,tokenName:%v",err,eth.ChainName(),addressHex,tokenName))
+		panic(fmt.Errorf("NewTokenQuery error:%+v\n,chainName:%v,addressHex:%v,tokenName:%v", err, eth.ChainName(), addressHex, tokenName))
 	}
-	fmt.Printf("NewTokenQuery success,chainName:%v,addressHex:%v,tokenName:%v",eth.ChainName(),addressHex,tokenName)
+	fmt.Printf("NewTokenQuery success,chainName:%v,addressHex:%v,tokenName:%v", eth.ChainName(), addressHex, tokenName)
 	tQuery.decimals = decimals
 	return tQuery
 }
@@ -41,7 +41,7 @@ func NewTokenQuery(eth *Evm, addressHex, tokenName string) TokenQuery {
 func getTokenContract() evmtypes.CompiledContract {
 	var tokenContract evmtypes.CompiledContract
 	if err := json.Unmarshal(tokenJson, &tokenContract); err != nil {
-		panic(fmt.Errorf("getTokenContract json.Unmarshal error:%+v",err))
+		panic(fmt.Errorf("getTokenContract json.Unmarshal error:%+v", err))
 	}
 	return tokenContract
 }

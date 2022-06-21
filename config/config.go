@@ -9,16 +9,16 @@ import (
 )
 
 const (
-	DefaultHomeDirName          = ".teleport-data-analytics"
-	DefaultConfigDirName        = "configs" // TODO delete initialization.DefaultConfigDirName
-	DefaultConfigName           = "config.toml"
+	DefaultHomeDirName   = ".teleport-data-analytics"
+	DefaultConfigDirName = "configs" // TODO delete initialization.DefaultConfigDirName
+	DefaultConfigName    = "config.toml"
 )
 
 var (
-	Home                 string
-	LocalConfig          string
-	UserDir, _           = os.UserHomeDir()
-	DefaultHomePath      = filepath.Join(UserDir, DefaultHomeDirName)
+	Home            string
+	LocalConfig     string
+	UserDir, _      = os.UserHomeDir()
+	DefaultHomePath = filepath.Join(UserDir, DefaultHomeDirName)
 )
 
 var (

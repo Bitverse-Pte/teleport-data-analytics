@@ -9,12 +9,12 @@ import (
 
 	"github.com/teleport-network/teleport-data-analytics/chains"
 	"github.com/teleport-network/teleport-data-analytics/config"
-	"github.com/teleport-network/teleport-data-analytics/metrics"
-	"github.com/teleport-network/teleport-data-analytics/repo/database"
 	"github.com/teleport-network/teleport-data-analytics/jobs/bridges"
 	"github.com/teleport-network/teleport-data-analytics/jobs/datas"
 	"github.com/teleport-network/teleport-data-analytics/jobs/monitoring"
 	"github.com/teleport-network/teleport-data-analytics/jobs/packet"
+	"github.com/teleport-network/teleport-data-analytics/metrics"
+	"github.com/teleport-network/teleport-data-analytics/repo/database"
 )
 
 type PacketService struct {

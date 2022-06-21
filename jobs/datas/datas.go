@@ -65,7 +65,7 @@ func ReloadState(chainType string, period time.Duration) {
 	scheduler.Every(period * time.Minute).Do(func() {
 		defer func() {
 			if err := recover(); err != nil {
-				logrus.Errorf("syncToDB panic:%+v",err)
+				logrus.Errorf("syncToDB panic:%+v", err)
 			}
 		}()
 		if err := LoadState(chainType); err != nil {

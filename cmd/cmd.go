@@ -1,13 +1,15 @@
 package cmd
 
 import (
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
-	"github.com/teleport-network/teleport-data-analytics/jobs"
-	"github.com/teleport-network/teleport-data-analytics/version"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
+
+	"github.com/teleport-network/teleport-data-analytics/jobs"
+	"github.com/teleport-network/teleport-data-analytics/version"
 
 	"github.com/go-co-op/gocron"
 	"github.com/spf13/cobra"
@@ -48,7 +50,7 @@ func Run() {
 	scheduler.StartAsync()
 	metricMux := http.NewServeMux()
 	metricMux.Handle("/metrics", promhttp.Handler())
-	if err := http.ListenAndServe(":3030", metricMux);err != nil {
+	if err := http.ListenAndServe(":3030", metricMux); err != nil {
 		logrus.Fatal(err)
 	}
 }

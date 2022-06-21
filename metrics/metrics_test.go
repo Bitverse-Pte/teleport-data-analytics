@@ -2,10 +2,6 @@ package metrics
 
 import (
 	"fmt"
-	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
-	"github.com/go-kit/kit/metrics/teststat"
-	stdprometheus "github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io/ioutil"
 	"math"
 	"math/big"
@@ -17,6 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
+	"github.com/go-kit/kit/metrics/teststat"
+	stdprometheus "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func TestCounter(t *testing.T) {

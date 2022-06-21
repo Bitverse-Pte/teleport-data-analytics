@@ -29,7 +29,7 @@ func (j *Invoke) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &plain); err != nil {
 		return err
 	}
-	if err := checkRequired(plain);err != nil {
+	if err := checkRequired(plain); err != nil {
 		return err
 	}
 	*j = Invoke(plain)
@@ -66,7 +66,7 @@ func (j *BridgeChain) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &plain); err != nil {
 		return err
 	}
-	if err := checkRequired(plain);err != nil {
+	if err := checkRequired(plain); err != nil {
 		return err
 	}
 	*j = BridgeChain(plain)
@@ -97,7 +97,7 @@ func (j *Token) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &plain); err != nil {
 		return err
 	}
-	if err := checkRequired(plain);err != nil {
+	if err := checkRequired(plain); err != nil {
 		return err
 	}
 	*j = Token(plain)
@@ -119,7 +119,7 @@ func (j *Bridge) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &plain); err != nil {
 		return err
 	}
-	if err := checkRequired(plain);err != nil {
+	if err := checkRequired(plain); err != nil {
 		return err
 	}
 	*j = Bridge(plain)
@@ -138,14 +138,14 @@ func (j *Bridges) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &plain); err != nil {
 		return err
 	}
-	if err := checkRequired(plain);err != nil {
+	if err := checkRequired(plain); err != nil {
 		return err
 	}
 	*j = Bridges(plain)
 	return nil
 }
 
-func checkRequired(str interface{})error {
+func checkRequired(str interface{}) error {
 	t := reflect.TypeOf(str)
 	v := reflect.ValueOf(str)
 	for k := 0; k < t.NumField(); k++ {

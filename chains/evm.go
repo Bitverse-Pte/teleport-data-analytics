@@ -87,22 +87,22 @@ func NewEvmCli(evmCfg config.EvmConfig) (*Evm, error) {
 	}
 	EndPointAddress := common.HexToAddress(evmCfg.EndPointAddr)
 	return &Evm{
-		chainName:   chainName,
-		ethClient:   ethClient,
-		packet:      packetFilter,
-		packetAddr:  chainCfg.PacketContract,
-		packetTopic: chainCfg.PacketTopic,
-		ackTopic:    chainCfg.AckTopic,
-		frequency:   chainCfg.Frequency,
-		batchNumber: chainCfg.BatchNumber,
+		chainName:        chainName,
+		ethClient:        ethClient,
+		packet:           packetFilter,
+		packetAddr:       chainCfg.PacketContract,
+		packetTopic:      chainCfg.PacketTopic,
+		ackTopic:         chainCfg.AckTopic,
+		frequency:        chainCfg.Frequency,
+		batchNumber:      chainCfg.BatchNumber,
 		tokenContract:    getTokenContract(), // TODO fix
 		endpointContract: ethbind.NewBoundContract(EndPointAddress, transferContract.ABI, ethClient, ethClient, ethClient),
 		agentAddr:        chainCfg.AgentAddr,
-		EndPointAddr:  evmCfg.EndPointAddr,
-		nativeToken:   evmCfg.NativeToken,
-		tokenDecimals: evmCfg.NativeDecimals,
-		startHeight:   evmCfg.StartHeight,
-		revisedHeight: evmCfg.RevisedHeight,
+		EndPointAddr:     evmCfg.EndPointAddr,
+		nativeToken:      evmCfg.NativeToken,
+		tokenDecimals:    evmCfg.NativeDecimals,
+		startHeight:      evmCfg.StartHeight,
+		revisedHeight:    evmCfg.RevisedHeight,
 	}, nil
 }
 
@@ -117,7 +117,7 @@ func NewEvmCli(evmCfg config.EvmConfig) (*Evm, error) {
 func getEvmEndpointContract() evmtypes.CompiledContract {
 	var endpointContract evmtypes.CompiledContract
 	if err := json.Unmarshal(evmEndpointJson, &endpointContract); err != nil {
-		panic(fmt.Errorf("getEvmEndpointContract json.Unmarshal :%+v",err))
+		panic(fmt.Errorf("getEvmEndpointContract json.Unmarshal :%+v", err))
 	}
 	return endpointContract
 }
@@ -126,7 +126,7 @@ func getEvmEndpointContract() evmtypes.CompiledContract {
 func getEndpointContract() evmtypes.CompiledContract {
 	var endpointContract evmtypes.CompiledContract
 	if err := json.Unmarshal(EndpointJson, &endpointContract); err != nil {
-		panic(fmt.Errorf("getEndpointContract json.Unmarshal :%+v",err))
+		panic(fmt.Errorf("getEndpointContract json.Unmarshal :%+v", err))
 	}
 	return endpointContract
 }

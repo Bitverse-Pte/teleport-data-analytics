@@ -56,6 +56,9 @@ var (
 	// mapping token list for each two cross-chain
 	// {src_chain}/{dest_chain} => Tokens
 	Bridges = make(map[string]BridgeInfo)
+	// bridge name adjacency list
+	// examples: bsc -> [teleport,rinkeby]
+	BridgeNameAdjList = make(map[string][]string)
 
 	TokenMap = make(map[string]types.TokenInfo)
 )
@@ -151,6 +154,7 @@ func LoadState(chainType string) error {
 		tmpTokensMap[fmt.Sprintf("%s/%s", token.ChainId, token.Address)] = token
 	}
 	for _, bridge := range tmpBridges.Bridges {
+		BridgeNameAdjList[bridge.SrcChain.Name] = append(BridgeNameAdjList[bridge.SrcChain.Name], bridge.DestChain.Name)
 		if _, ok := tmpChainsMap[bridge.SrcChain.ChainId]; !ok {
 			continue
 		}

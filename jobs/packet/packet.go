@@ -1,7 +1,9 @@
 package packet
 
 import (
+	"errors"
 	"fmt"
+	"github.com/teleport-network/teleport-data-analytics/jobs/datas"
 	"math"
 	"math/big"
 	"strconv"
@@ -585,6 +587,10 @@ func (p *PacketPool) syncPacketByHash(chainName, txHash string) ([]model.CrossCh
 
 func (p *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransaction, name string, updateHeight uint64) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
+		var (
+			txInc         uint64
+			txFailedCount uint64
+		)
 		for _, cctx := range crossChainTxs {
 			var ccTransaction model.CrossChainTransaction
 			if err := tx.Where("src_chain = ? and dest_chain = ? and sequence = ? ", cctx.SrcChain, cctx.DestChain, cctx.Sequence).First(&ccTransaction).Error; err != nil {
@@ -592,6 +598,10 @@ func (p *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransaction, name 
 					if err := tx.Create(&cctx).Error; err != nil {
 						p.log.Errorf("create CrossChainTransaction  error!!!,result:%+v", cctx)
 						return err
+					}
+					txInc++
+					if model.PacketStatus(cctx.Status) == model.Fail {
+						txFailedCount++
 					}
 					p.log.Infof("CrossChainTransaction create success!!!,result:%+v", cctx)
 					continue
@@ -604,12 +614,39 @@ func (p *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransaction, name 
 				cctx.ID = ccTransaction.ID
 				if cctx.Status < ccTransaction.Status {
 					cctx.Status = ccTransaction.Status
+					if model.PacketStatus(cctx.Status) == model.Fail {
+						txFailedCount--
+					}
 				}
+
 				if err := tx.Updates(&cctx).Error; err != nil {
 					p.log.Errorf("Update CrossChainTransaction  error!!!,result:%+v", cctx)
 					return err
 				}
 				p.log.Infof("Update CrossChainTransaction  success!!!,result:%+v", cctx)
+			}
+		}
+
+		// todo work here
+		//// mark that have done init work
+		//var markGlobal, markBridgeMetics bool
+		//// try to init globalMetrics
+		//if err,markGlobal := p.initGlobalMetrics(); err != nil {
+		//	return err
+		//}
+
+		// try to  init SingleDirectionBridgeMetrics
+		if err := p.InitSingleDirectionBridgeMetrics(); err != nil {
+			return err
+		}
+
+		preSyncState := model.SyncState{}
+		if err := tx.Where(&model.SyncState{ChainName: name}, "chain_name").Find(&preSyncState).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				p.log.Error("Query SyncState not found! ")
+				return err
+			} else if err != nil {
+				return err
 			}
 		}
 		if err := tx.Updates(&model.SyncState{ChainName: name, Height: updateHeight}).Error; err != nil {
@@ -680,6 +717,132 @@ func (p *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) e
 	return nil
 }
 
+// init SingleDirectionBridgeMetrics table by CrossChainTransaction table
+// Notice: this function must run after init CrossChainTransaction table
+// Warn: You must clean SingleDirectionBridgeMetrics table after you clean the CrossChainTransaction table
+func (p *PacketPool) InitSingleDirectionBridgeMetrics() error {
+	// SingleDirectionBridgeMetrics table init
+
+	// query CrossChainTransaction table if it is empty then exit
+	if err := p.DB.First(&model.CrossChainTransaction{}).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			p.log.Error("CrossChainTransaction table is empty, please init CrossChainTransaction table first")
+			return err
+		} else if err != nil {
+			p.log.Errorf("query CrossChainTransaction table error:%+v", err)
+			return err
+		}
+	}
+
+	// query SingleDirectionBridgeMetrics if it is empty then init otherwise return
+	if err := p.DB.First(&model.SingleDirectionBridgeMetrics{}).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			p.log.Errorf("query SingleDirectionBridgeMetrics table error:%+v", err)
+			return err
+		}
+	} else {
+		return nil
+	}
+
+	// init SingleDirectionBridgeMetrics table by scan CrossChainTransaction table
+	for srcChainName, targetChainList := range datas.BridgeNameAdjList {
+		for _, destChainName := range targetChainList {
+			st := &model.SingleDirectionBridgeMetrics{}
+			// every bridge has two direction ,so we need to scan twice to construct the single direction bridge metrics
+			for i := 0; i < 2; i++ {
+				if i == 0 {
+					st = &model.SingleDirectionBridgeMetrics{}
+					st.SrcChainName = srcChainName
+					st.DestChainName = destChainName
+				} else {
+					st = &model.SingleDirectionBridgeMetrics{}
+					st.SrcChainName = destChainName
+					st.DestChainName = srcChainName
+				}
+
+				//  calc pktAmount
+				// select count(*) as pktAmount from cross_chain_transactions where src_chain='bsctest' and dest_chain='teleport' ;
+				if err := p.DB.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ?", srcChainName, destChainName).Count(&st.PktAmt).Error; err != nil {
+					p.log.Errorf("query pktAmount error:%+v", err)
+					return err // return error if query pktAmount error
+				}
+				// calc FeeAmt
+				// select sum(packet_fee)  as fee_Amount from cross_chain_transactions where src_chain='teleport' and dest_chain='bsctest' ;
+				if err := p.DB.Table("cross_chain_transactions").Select("sum(packet_fee) as fee_Amount").Where("src_chain = ? and dest_chain = ?", srcChainName, destChainName).Find(&st.FeeAmt).Error; err != nil {
+					p.log.Errorf("query feeAmount error:%+v", err)
+					return err // return error if query feeAmount error
+				}
+
+				// calc FailedAmt
+				//SELECT count(*) as failedAmt FROM backend.cross_chain_transactions where src_chain='teleport' and dest_chain='bsctest' and  (status=3 or status =4);
+				if err := p.DB.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ? and (status = ? or status = ?)", srcChainName, destChainName, model.Fail, model.Refund).Count(&st.FailedAmt).Error; err != nil {
+					p.log.Errorf("query FailedAmount error:%+v", err)
+					return err // return error if query FailedAmount error
+				}
+
+				// calc UAmount
+				//select sum(amount)as usdt_amount from cross_chain_transactions where src_chain='teleport' and dest_chain='rinkeby' and token_name = 'usdt';
+				if err := p.DB.Table("cross_chain_transactions").Select("sum(amount) as u_amt").Where("src_chain = ? and dest_chain = ? and token_name = ?", destChainName, srcChainName, "usdt").Find(&st.UAmt).Error; err != nil {
+					p.log.Errorf("query usdtAmount error:%+v", err)
+					return err // return error if query usdtAmount error
+
+				}
+				// calc TeleAmount
+
+				// insert into SingleDirectionBridgeMetrics table
+				if err := p.DB.Create(st).Error; err != nil {
+					p.log.Errorf("insert SingleDirectionBridgeMetrics error:%+v", err)
+					return err // return error if insert SingleDirectionBridgeMetrics error
+				}
+			}
+
+		}
+	}
+	return nil
+}
+
+// init GlobalMetrics table by SingleDirectionBridgeMetrics table
+// Notice: this function must run after init CrossChainTransaction table
+// Warn: You must clean GlobalMetrics table after you clean the SingleDirectionBridgeMetrics table
+func (p *PacketPool) initGlobalMetrics() (error, bool) {
+	// query CrossChainTransaction table if it is empty then exit
+	if err := p.DB.First(&model.CrossChainTransaction{}).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			p.log.Error("CrossChainTransaction table is empty, please init CrossChainTransaction table first")
+			return errors.New("CrossChainTransaction table is empty"), false
+		} else if err != nil {
+			p.log.Errorf("query CrossChainTransaction table error:%+v", err)
+			return err, false
+		}
+	}
+	// query GlobalMetrics if it is empty then init otherwise return
+	if err := p.DB.First(&model.GlobalMetrics{}).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			p.log.Errorf("query GlobalMetrics table error:%+v", err)
+			return err, false
+		}
+	} else {
+		return nil, false
+	}
+
+	// init GlobalMetrics table by scan CrossChainTransaction table
+	// SELECT count(distinct sender) FROM backend.cross_chain_transactions where length(sender)>0;
+	globalMetris := &model.GlobalMetrics{}
+	if err := p.DB.Table("cross_chain_transactions").Select("count(distinct sender) as user_amt").Where("length(sender) > ?", 0).Find(globalMetris.UserAmt).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			p.log.Errorf("count userAmount error:%+v", err)
+			return err, false // return error if count userAmount error
+		}
+	}
+
+	// insert into GlobalMetrics table
+	if err := p.DB.Create(globalMetris).Error; err != nil {
+		p.log.Errorf("insert GlobalMetrics error:%+v", err)
+		return err, false // return error if insert GlobalMetrics error
+	}
+
+	return nil, true
+}
 func getStatus(ack packettypes.Acknowledgement) (model.PacketStatus, string) {
 	var status model.PacketStatus
 	var ackMsg string

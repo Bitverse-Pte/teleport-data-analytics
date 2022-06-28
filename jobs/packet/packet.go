@@ -160,7 +160,7 @@ func (p *PacketPool) syncToDB(name string, c chains.BlockChain) error {
 func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, chain chains.BlockChain, updateHeight uint64) error {
 	packets, err := chain.GetPackets(fromBlock, toBlock)
 	if err != nil {
-		return err
+		return fmt.Errorf("get packets error:%s", err.Error())
 	}
 	var (
 		crossChainTxs    []model.CrossChainTransaction
@@ -169,7 +169,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 
 	nativeDecimal, err := chain.GetNativeDecimal()
 	if err != nil {
-		return err
+		return fmt.Errorf("get nativeDecimal error:%s", err.Error())
 	}
 	for _, pkts := range packets {
 		for _, pt := range pkts.BizPackets {
@@ -874,7 +874,7 @@ func (p *PacketPool) insertSingleDirectionBridgeMetrics(bridgeMetrics *model.Sin
 
 	// query SingleDirectionBridgeMetrics
 	oldData := &model.SingleDirectionBridgeMetrics{}
-	if err := p.DB.Model(&model.SingleDirectionBridgeMetrics{}).Where("src_chain=? and dest_chain = ?", bridgeMetrics.SrcChain, bridgeMetrics.DestChain).Last(oldData).Error; err != nil {
+	if err := p.DB.Where("src_chain=? and dest_chain = ?", bridgeMetrics.SrcChain, bridgeMetrics.DestChain).Last(oldData).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
 			return err

@@ -13,7 +13,10 @@ func Sum(a, b string) string {
 		b = "0"
 	}
 	//convert
-	var bigA, bigB, sum *big.Int
+	var (
+		bigA, bigB *big.Int
+		sum        = new(big.Int)
+	)
 	var ok bool
 	if bigA, ok = big.NewInt(0).SetString(a, 10); !ok {
 		return ""

@@ -1,9 +1,11 @@
 package packet
 
 import (
+	"errors"
 	"fmt"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/teleport-network/teleport-data-analytics/jobs/datas"
+	"github.com/teleport-network/teleport-data-analytics/tools"
 	"github.com/teleport-network/teleport-data-analytics/types"
 	"math"
 	"math/big"
@@ -438,6 +440,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 	if err := p.updateMetrics(classifiedTxs); err != nil {
 		return fmt.Errorf("update metrics fail:%v", err.Error())
 	}
+	p.log.Infof("update metrics success,chainName:%s,updateHeight:%d", chain.ChainName(), updateHeight)
 	return p.reconcile(ackcrossChainTxs)
 }
 
@@ -760,8 +763,7 @@ func (p *PacketPool) initSingleDirectionBridgeMetrics() (err error) {
 
 					// calc FailedAmt
 					//SELECT count(*) as failedAmt FROM backend.cross_chain_transactions where src_chain='teleport' and dest_chain='bsctest' and  (status=3 or status =4);
-					var failedAmt int64
-					if err := p.DB.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ? and (status = ? or status = ?)", srcChainName, destChainName, model.Fail, model.Refund).Count(&failedAmt).Error; err != nil {
+					if err := p.DB.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ? and (status = ? or status = ?)", srcChainName, destChainName, model.Fail, model.Refund).Count(&st.FailedAmt).Error; err != nil {
 						p.log.Errorf("query FailedAmount error:%+v", err)
 						return err // return error if query FailedAmount error
 					}
@@ -781,7 +783,6 @@ func (p *PacketPool) initSingleDirectionBridgeMetrics() (err error) {
 					}
 
 					// insert into SingleDirectionBridgeMetrics table
-					st.FailedAmt = strconv.FormatInt(failedAmt, 10)
 					if err := p.DB.Create(st).Error; err != nil {
 						p.log.Errorf("insert SingleDirectionBridgeMetrics error:%+v", err)
 						return err // return error if insert SingleDirectionBridgeMetrics error
@@ -874,11 +875,19 @@ func (p *PacketPool) insertSingleDirectionBridgeMetrics(bridgeMetrics *model.Sin
 	// query SingleDirectionBridgeMetrics
 	oldData := &model.SingleDirectionBridgeMetrics{}
 	if err := p.DB.Model(&model.SingleDirectionBridgeMetrics{}).Where("src_chain=? and dest_chain = ?", bridgeMetrics.SrcChain, bridgeMetrics.DestChain).Last(oldData).Error; err != nil {
-		p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
-		return err
+		if err != gorm.ErrRecordNotFound {
+			p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
+			return err
+		}
 	}
 
 	// get new SingleDirectionBridgeMetrics
+	feeSum := tools.Sum(bridgeMetrics.FeeAmt, oldData.FeeAmt)
+	if feeSum == "" {
+		p.log.Error("sum fee error")
+		return errors.New("sum fee error")
+	}
+
 	newData := &model.SingleDirectionBridgeMetrics{
 		SrcChain:  oldData.SrcChain,
 		DestChain: oldData.DestChain,
@@ -904,21 +913,25 @@ func (p *PacketPool) updateMetrics(bridgeTx types.BridgeTx) error {
 		for destChainName, txs := range bridgeTx.Txs {
 			// travel all txs
 			// calc pktAmt
-			dPktAmt := uint64(len(txs))
-			dFeeAmt := float64(0)
-			dFailedAmt := float64(0)
-			uAmt := float64(0)
-			teleAmt := float64(0)
+			dPktAmt := int64(len(txs))
+			dFeeAmt := big.NewInt(0)
+			dFailedAmt := int64(0)
+			dUAmt := big.NewInt(0)
+			teleAmt := big.NewInt(0)
 			for _, t := range txs {
-				dFeeAmt += t.PacketFee
+				tmpBig, _ := big.NewInt(0).SetString(strconv.FormatInt(int64(t.PacketFee), 10), 10)
+				dFeeAmt = dFeeAmt.Add(dFeeAmt, tmpBig)
 				status := model.PacketStatus(t.Status)
 				if status == model.Fail || status == model.Refund {
 					dFailedAmt++
 				}
 				if t.TokenName == "usdt" {
-					uAmt += t.AmountFloat
+					bigTmp, _ := big.NewInt(0).SetString(t.Amount, 10)
+					dUAmt = dUAmt.Add(dUAmt, bigTmp)
+
 				} else if t.TokenName == "tele" {
-					teleAmt += t.AmountFloat
+					bigTmp, _ := big.NewInt(0).SetString(t.Amount, 10)
+					teleAmt = teleAmt.Add(teleAmt, bigTmp)
 				}
 
 			}
@@ -928,11 +941,11 @@ func (p *PacketPool) updateMetrics(bridgeTx types.BridgeTx) error {
 			dData := &model.SingleDirectionBridgeMetrics{
 				SrcChain:  bridgeTx.SrcChain,
 				DestChain: destChainName,
-				PktAmt:    int64(dPktAmt),
-				FeeAmt:    strconv.FormatUint(uint64(dFeeAmt), 10),
-				FailedAmt: strconv.FormatUint(uint64(dFailedAmt), 10),
-				UAmt:      strconv.FormatUint(uint64(uAmt), 10),
-				TeleAmt:   strconv.FormatUint(uint64(teleAmt), 10),
+				PktAmt:    dPktAmt,
+				FeeAmt:    dFeeAmt.String(),
+				FailedAmt: dFailedAmt,
+				UAmt:      dUAmt.String(),
+				TeleAmt:   teleAmt.String(),
 			}
 			err := p.insertSingleDirectionBridgeMetrics(dData)
 			if err != nil {

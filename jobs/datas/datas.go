@@ -58,7 +58,7 @@ var (
 	Bridges = make(map[string]BridgeInfo)
 	// bridge name adjacency list
 	// examples: bsc -> [teleport,rinkeby]
-	BridgeNameAdjList = make(map[string][]string)
+	BridgeNameAdjList map[string][]string
 
 	TokenMap = make(map[string]types.TokenInfo)
 )
@@ -87,6 +87,7 @@ func LoadState(chainType string) error {
 	var chainList types.Chains
 	counterpartyChains := make(map[string]types.Chains)
 	bridges := make(map[string]BridgeInfo)
+	tmpBridgeNameAdjList := make(map[string][]string)
 	switch chainType {
 	case "qanet":
 		network := "QA"
@@ -154,7 +155,7 @@ func LoadState(chainType string) error {
 		tmpTokensMap[fmt.Sprintf("%s/%s", token.ChainId, token.Address)] = token
 	}
 	for _, bridge := range tmpBridges.Bridges {
-		BridgeNameAdjList[bridge.SrcChain.Name] = append(BridgeNameAdjList[bridge.SrcChain.Name], bridge.DestChain.Name)
+		tmpBridgeNameAdjList[bridge.SrcChain.Name] = append(tmpBridgeNameAdjList[bridge.SrcChain.Name], bridge.DestChain.Name)
 		if _, ok := tmpChainsMap[bridge.SrcChain.ChainId]; !ok {
 			continue
 		}
@@ -229,6 +230,7 @@ func LoadState(chainType string) error {
 	ChainList = chainList
 	CounterpartyChains = counterpartyChains
 	Bridges = bridges
+	BridgeNameAdjList = tmpBridgeNameAdjList
 	return nil
 }
 

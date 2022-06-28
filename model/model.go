@@ -28,7 +28,7 @@ type SingleDirectionBridgeMetrics struct {
 	DestChain string    `gorm:"index:idx_from_to"`          // chain name
 	PktAmt    int64     `gorm:"default:0;type:int"`         // packet amount
 	FeeAmt    string    `gorm:"default:0;"`                 // fee amount
-	FailedAmt string    `gorm:"default:0;"`                 // failed amount
+	FailedAmt int64     `gorm:"default:0;"`                 // failed amount
 	UAmt      string    `gorm:"default:0;"`                 // USDT  amount
 	TeleAmt   string    `gorm:"default:0;"`                 // Tele amount
 	CreatedAt time.Time `gorm:"type:timestamp"`             // created time

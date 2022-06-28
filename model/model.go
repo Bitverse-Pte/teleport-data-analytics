@@ -23,15 +23,17 @@ type SyncState struct {
 // single direction bridge metrics
 // index idx_from_to
 type SingleDirectionBridgeMetrics struct {
-	ID        uint64    `gorm:"primary_key,auto_increment"` // primary key
-	SrcChain  string    `gorm:"index:idx_from_to"`          // chain name
-	DestChain string    `gorm:"index:idx_from_to"`          // chain name
-	PktAmt    int64     `gorm:"default:0;type:int"`         // packet amount
-	FeeAmt    string    `gorm:"default:0;"`                 // fee amount
-	FailedAmt int64     `gorm:"default:0;"`                 // failed amount
-	UAmt      string    `gorm:"default:0;"`                 // USDT  amount
-	TeleAmt   string    `gorm:"default:0;"`                 // Tele amount
-	CreatedAt time.Time `gorm:"type:timestamp"`             // created time
+	ID        uint64 `gorm:"primary_key,auto_increment"` // primary key
+	SrcChain  string `gorm:"index:idx_from_to"`          // chain name
+	DestChain string `gorm:"index:idx_from_to"`          // chain name
+	PktAmt    int64  `gorm:"default:0;type:int"`         // packet amount
+	FeeAmt    string `gorm:"default:0;"`                 // fee amount
+	//UsdtFeeAmt string `gorm:"default:0;"`                 // usdt fee amount
+	//TeleFeeAmt string `gorm:"default:0;"`                 // tele fee amount
+	FailedAmt int64     `gorm:"default:0;"`     // failed amount
+	UAmt      string    `gorm:"default:0;"`     // USDT  amount
+	TeleAmt   string    `gorm:"default:0;"`     // Tele amount
+	CreatedAt time.Time `gorm:"type:timestamp"` // created time
 }
 
 // global bridge metrics

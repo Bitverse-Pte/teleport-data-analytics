@@ -396,6 +396,9 @@ func (c *TendermintClient) getRecievedAcks(stringEvents sdk.StringEvents) ([]IBC
 	dstChannel := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyDstChannel)
 	dstPort := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyDstPort)
 	packetDatas := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyData)
+	if len(sequences) == 0 {
+		return nil, nil
+	}
 	if !(len(sequences) == len(srcChannel) && len(sequences) == len(srcPort) && len(sequences) == len(dstChannel) && len(sequences) == len(dstPort)) {
 		return nil, fmt.Errorf("invalid getRecievedAcks")
 	}

@@ -2,8 +2,6 @@ package monitoring
 
 import (
 	"fmt"
-	"github.com/teleport-network/teleport-data-analytics/jobs/datas"
-	"strconv"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -52,9 +50,9 @@ func (m *Monitoring) Monitoring(scheduler *gocron.Scheduler) {
 	})
 
 	// every day exposed the bridge metrics
-	_, err = scheduler.Every(24).Hours().Do(func() {
-		m.bridgeMetrics()
-	})
+	//_, err = scheduler.Every(24).Hours().Do(func() {
+	//	m.bridgeMetrics()
+	//})
 
 	if err != nil {
 		panic(fmt.Errorf("pendingPacketMonitoring scheduler.Every exec error:%+v", err))
@@ -106,42 +104,42 @@ func (m *Monitoring) pendingPacketMonitoring() {
 }
 
 // bridgeMetrics exposed the bridge metrics
-func (m *Monitoring) bridgeMetrics() {
-	// query from singleDirectionBridgeMetrics table
-	// travels all the chainNames
-	var (
-		metric = &model.SingleDirectionBridgeMetrics{}
-		err    error
-	)
-
-	for chainName, chainNames := range datas.BridgeNameAdjList {
-		// travel all the chainNames in the adjList
-		for _, cn := range chainNames {
-			// query the total count of packets from the bridge
-			if err = m.db.Where("src_chain = ? and dest_chain = ?", chainName, cn).Last(metric).Error; err != nil {
-				if err == gorm.ErrRecordNotFound {
-					m.log.Warnf("singleDirectionBridgeMetrics query error:%+v", err)
-					continue
-				} else {
-					m.log.Errorf("singleDirectionBridgeMetrics query error:%+v", err)
-					continue
-				}
-			}
-			// pkt amount on the bridge
-			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "pkt_amt").Set(float64(metric.PktAmt))
-			// pkt failed amount on the bridge
-			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "failed_amt").Set(float64(metric.FailedAmt))
-			// usdt amount on the bridge
-			// TODO: precision issue
-			tmpV, _ := strconv.ParseFloat(metric.UAmt, 64)
-			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "usdt_amt").Set(tmpV)
-			// tele amount on the bridge
-			tmpV, _ = strconv.ParseFloat(metric.TeleAmt, 64)
-			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "tele_amt").Set(tmpV)
-			// TODO: fee amount distinguish between different tokens
-			tmpV, _ = strconv.ParseFloat(metric.FeeAmt, 64)
-			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "fee_amt").Set(tmpV)
-		}
-	}
-
-}
+//func (m *Monitoring) bridgeMetrics() {
+//	// query from singleDirectionBridgeMetrics table
+//	// travels all the chainNames
+//	var (
+//		metric = &model.SingleDirectionBridgeMetrics{}
+//		err    error
+//	)
+//
+//	for chainName, chainNames := range datas.BridgeNameAdjList {
+//		// travel all the chainNames in the adjList
+//		for _, cn := range chainNames {
+//			// query the total count of packets from the bridge
+//			if err = m.db.Where("src_chain = ? and dest_chain = ?", chainName, cn).Last(metric).Error; err != nil {
+//				if err == gorm.ErrRecordNotFound {
+//					m.log.Warnf("singleDirectionBridgeMetrics query error:%+v", err)
+//					continue
+//				} else {
+//					m.log.Errorf("singleDirectionBridgeMetrics query error:%+v", err)
+//					continue
+//				}
+//			}
+//			// pkt amount on the bridge
+//			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "pkt_amt").Set(float64(metric.PktAmt))
+//			// pkt failed amount on the bridge
+//			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "failed_amt").Set(float64(metric.FailedAmt))
+//			// usdt amount on the bridge
+//			// TODO: precision issue
+//			tmpV, _ := strconv.ParseFloat(metric.UAmt, 64)
+//			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "usdt_amt").Set(tmpV)
+//			// tele amount on the bridge
+//			tmpV, _ = strconv.ParseFloat(metric.TeleAmt, 64)
+//			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "tele_amt").Set(tmpV)
+//			// TODO: fee amount distinguish between different tokens
+//			tmpV, _ = strconv.ParseFloat(metric.FeeAmt, 64)
+//			m.metricsManager.BridgeGauge.With("src_chain", chainName).With("dest_chain", cn).With("option", "fee_amt").Set(tmpV)
+//		}
+//	}
+//
+//}

@@ -54,13 +54,13 @@ var (
 	// mapping the counterparty chain list for each chain
 	CounterpartyChains = make(map[string]types.Chains)
 	// mapping token list for each two cross-chain
-	// {src_chain}/{dest_chain} => Tokens
+	// {src_chain_chainid}/{dest_chain_chainid} => Tokens
 	Bridges = make(map[string]BridgeInfo)
 	// bridge name adjacency list
 	// examples: bsc -> [teleport,rinkeby]
 	BridgeNameAdjList map[string][]string
-
-	TokenMap = make(map[string]types.TokenInfo)
+	TokenMap          = make(map[string]types.TokenInfo)
+	ChainName2ChainId map[string]string // only for bridge pair
 )
 
 func ReloadState(chainType string, period time.Duration) {
@@ -85,6 +85,7 @@ func LoadState(chainType string) error {
 	var tmpCosmosChains = new(cosmostypes.CosmosChains)
 	var tmpTokens = new(types.TokenlistSchemaJson)
 	var chainList types.Chains
+	ChainName2ChainId = make(map[string]string)
 	counterpartyChains := make(map[string]types.Chains)
 	bridges := make(map[string]BridgeInfo)
 	tmpBridgeNameAdjList := make(map[string][]string)
@@ -155,6 +156,14 @@ func LoadState(chainType string) error {
 		tmpTokensMap[fmt.Sprintf("%s/%s", token.ChainId, token.Address)] = token
 	}
 	for _, bridge := range tmpBridges.Bridges {
+		// todo: teleport chain name corresponds to different chain id, so we need to skip one of them.
+		if bridge.SrcChain.ChainId != "teleport_7001-1" {
+			ChainName2ChainId[bridge.SrcChain.Name] = bridge.SrcChain.ChainId
+		}
+		if bridge.DestChain.ChainId != "teleport_7001-1" {
+			ChainName2ChainId[bridge.DestChain.Name] = bridge.DestChain.ChainId
+		}
+
 		tmpBridgeNameAdjList[bridge.SrcChain.Name] = append(tmpBridgeNameAdjList[bridge.SrcChain.Name], bridge.DestChain.Name)
 		if _, ok := tmpChainsMap[bridge.SrcChain.ChainId]; !ok {
 			continue

@@ -1,11 +1,9 @@
 package packet
 
 import (
-	"errors"
 	"fmt"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/teleport-network/teleport-data-analytics/jobs/datas"
-	"github.com/teleport-network/teleport-data-analytics/tools"
 	"github.com/teleport-network/teleport-data-analytics/types"
 	"math"
 	"math/big"
@@ -54,7 +52,7 @@ const (
 
 func NewPacketDBPool(db *gorm.DB, log *logrus.Logger, chain map[string]chains.BlockChain, chainMap map[string]string, reconciliationCli *bridges.Bridges, reconcileEnable bool, metricsManager *metrics.MetricManager) *PacketPool {
 	cdc := makeCodec()
-	if err := db.AutoMigrate(&model.SyncState{}, &model.CrossPacket{}, &model.PacketRelation{}, &model.BridgeReconcileResult{}, &model.Record{}, &model.BlockReconcileResult{}, &model.CrossChainTransaction{}, &model.GlobalMetrics{}, &model.SingleDirectionBridgeMetrics{}); err != nil {
+	if err := db.AutoMigrate(&model.SyncState{}, &model.CrossPacket{}, &model.PacketRelation{}, &model.BridgeReconcileResult{}, &model.Record{}, &model.BlockReconcileResult{}, &model.CrossChainTransaction{}, &model.GlobalMetrics{}, &model.SingleDirectionBridgeMetrics{}, &model.Token{}); err != nil {
 		panic(fmt.Errorf("db.AutoMigrate:%+v", err))
 	}
 	return &PacketPool{
@@ -435,7 +433,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 	// judge if need to init singleDirectionMeritsTable
 
 	// classify crossChainTxs by different bridge
-	classifiedTxs := p.classifyCrossChainTxs(chain.ChainName(), crossChainTxs)
+	//classifiedTxs := p.classifyCrossChainTxs(chain.ChainName(), crossChainTxs)
 	executed := false
 	if executed, err = p.initSingleDirectionBridgeMetrics(); err != nil {
 		return err
@@ -443,7 +441,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 
 	// update metrics table by classifiedTxs
 	if !executed {
-		if err = p.updateMetrics(classifiedTxs); err != nil {
+		if err = p.updateMetrics(crossChainTxs); err != nil {
 			return fmt.Errorf("update metrics fail:%v", err.Error())
 		}
 	}
@@ -743,61 +741,89 @@ func (p *PacketPool) initSingleDirectionBridgeMetrics() (executed bool, err erro
 	if err = p.DB.Last(&model.SingleDirectionBridgeMetrics{}).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			// if SingleDirectionBridgeMetrics is empty then init it with crossChainTransaction table
+			var src, dest string // src and dest chain name
+			var amt string
 			if err = p.DB.Transaction(func(tx *gorm.DB) error {
 				// init SingleDirectionBridgeMetrics table by scan CrossChainTransaction table
 				for srcChainName, targetChainList := range datas.BridgeNameAdjList {
 					for _, destChainName := range targetChainList {
-						st := &model.SingleDirectionBridgeMetrics{}
 						// every bridge has two direction ,so we need to scan twice to construct the single direction bridge metrics
 						for i := 0; i < 2; i++ {
 							if i == 0 {
-								st = &model.SingleDirectionBridgeMetrics{}
-								st.SrcChain = srcChainName
-								st.DestChain = destChainName
+								src = srcChainName
+								dest = destChainName
 							} else {
-								st = &model.SingleDirectionBridgeMetrics{}
-								st.SrcChain = destChainName
-								st.DestChain = srcChainName
+								src = destChainName
+								dest = srcChainName
 							}
 
+							st := &model.SingleDirectionBridgeMetrics{
+								SrcChain:  src,
+								DestChain: dest,
+								//PktAmt:
+							}
+							// calc bridge info
 							//  calc pktAmount
 							// select count(*) as pktAmount from cross_chain_transactions where src_chain='bsctest' and dest_chain='teleport' ;
-							if err := p.DB.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ?", srcChainName, destChainName).Count(&st.PktAmt).Error; err != nil {
+							if err := tx.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ?", src, dest).Count(&st.PktAmt).Error; err != nil {
 								p.log.Errorf("query pktAmount error:%+v", err)
 								return err // return error if query pktAmount error
-							}
-							// calc FeeAmt
-							// select coalesce(sum(packet_fee),0)  as fee_Amount from cross_chain_transactions where src_chain='teleport' and dest_chain='bsctest' ;
-							if err := p.DB.Table("cross_chain_transactions").Select("coalesce(sum(packet_fee),0) as fee_Amount").Where("src_chain = ? and dest_chain = ?", srcChainName, destChainName).Find(&st.FeeAmt).Error; err != nil {
-								p.log.Errorf("query feeAmount error:%+v", err)
-								return err // return error if query feeAmount error
 							}
 
 							// calc FailedAmt
 							//SELECT count(*) as failedAmt FROM backend.cross_chain_transactions where src_chain='teleport' and dest_chain='bsctest' and  (status=3 or status =4);
-							if err := p.DB.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ? and (status = ? or status = ?)", srcChainName, destChainName, model.Fail, model.Refund).Count(&st.FailedAmt).Error; err != nil {
+							if err := tx.Table("cross_chain_transactions").Where("src_chain = ? and dest_chain = ? and (status = ? or status = ?)", src, dest, model.Fail, model.Refund).Count(&st.FailedAmt).Error; err != nil {
 								p.log.Errorf("query FailedAmount error:%+v", err)
 								return err // return error if query FailedAmount error
 							}
 
-							// calc UAmount
-							//select coalesce(sum(amount),0) as usdt_amount from cross_chain_transactions where src_chain='teleport' and dest_chain='rinkeby' and token_name = 'usdt';
-							if err := p.DB.Table("cross_chain_transactions").Select("coalesce(sum(amount),0) as u_amt").Where("src_chain = ? and dest_chain = ? and token_name = ?", srcChainName, destChainName, "usdt").Find(&st.UAmt).Error; err != nil {
-								p.log.Errorf("query usdtAmount error:%+v", err)
-								return err // return error if query usdtAmount error
-
-							}
-							// calc TeleAmount
-							// select coalesce(sum(amount),0) as tele_amount from cross_chain_transactions where src_chain='teleport' and dest_chain='rinkeby' and token_name = 'tele';
-							if err := p.DB.Table("cross_chain_transactions").Select("coalesce(sum(amount),0) as tele_amt").Where("src_chain = ? and dest_chain = ? and token_name = ?", srcChainName, destChainName, "tele").Find(&st.TeleAmt).Error; err != nil {
-								p.log.Errorf("query teleAmount error:%+v", err)
-								return err // return error if query teleAmount error
+							// create single direction bridge metrics
+							if err := tx.Create(st).Error; err != nil {
+								p.log.Errorf("create SingleDirectionBridgeMetrics error:%+v", err)
+								return err // return error if create SingleDirectionBridgeMetrics error
 							}
 
-							// insert into SingleDirectionBridgeMetrics table
-							if err := p.DB.Create(st).Error; err != nil {
-								p.log.Errorf("insert SingleDirectionBridgeMetrics error:%+v", err)
-								return err // return error if insert SingleDirectionBridgeMetrics error
+							// init token table
+							// todo: Fee Token is not necessarily in the token list
+							bridgeKey := datas.ChainName2ChainId[src] + "/" + datas.ChainName2ChainId[dest]
+							tokens := datas.Bridges[bridgeKey].Tokens
+							// travel all tokens in the bridge
+							for _, token := range tokens {
+								// for fee
+								// calc FeeAmt
+								// select coalesce(sum(packet_fee),0)  as fee_Amount from cross_chain_transactions where src_chain='teleport' and dest_chain='bsctest' ;
+								if err := tx.Table("cross_chain_transactions").Select("coalesce(sum(packet_fee),0) as fee_Amount").Where("src_chain = ? and dest_chain = ? and packet_fee_demand_token = ?", src, dest, token.Name).Find(&amt).Error; err != nil {
+									p.log.Errorf("query feeAmount error:%+v", err)
+									return err // return error if query feeAmount error
+								}
+								// insert
+								if err = tx.Create(&model.Token{
+									BridgeID:  st.ID,
+									TokenName: token.Name,
+									TokenType: 0,
+									Amt:       amt,
+								}).Error; err != nil {
+									p.log.Errorf("create Token error:%+v", err)
+								}
+
+								// for value
+								//select coalesce(sum(amount),0) as usdt_amount from cross_chain_transactions where src_chain='teleport' and dest_chain='rinkeby' and token_name = ?;
+								if err := tx.Table("cross_chain_transactions").Select("coalesce(sum(amount),0) as amt").Where("src_chain = ? and dest_chain = ? and token_name = ?", src, dest, token.Name).Find(&amt).Error; err != nil {
+									p.log.Errorf("query %+v amt error:%+v", token.Name, err)
+									return err // return error if query usdtAmount error
+
+								}
+								// insert
+								if err = tx.Create(&model.Token{
+									BridgeID:  st.ID,
+									TokenName: token.Name,
+									TokenType: 1,
+									Amt:       amt,
+								}).Error; err != nil {
+									p.log.Errorf("create Token error:%+v", err)
+									return err
+								}
+
 							}
 						}
 
@@ -876,96 +902,107 @@ func (p *PacketPool) insertGlobalMetrics(dData *model.GlobalMetrics) error {
 	return nil
 }
 
-// get latest bridge metrics and add delta to it and insert it to SingleDirectionBridgeMetrics table
-func (p *PacketPool) insertSingleDirectionBridgeMetrics(bridgeMetrics *model.SingleDirectionBridgeMetrics) error {
-	// query SingleDirectionBridgeMetrics
-	oldData := &model.SingleDirectionBridgeMetrics{}
-	if err := p.DB.Where("src_chain=? and dest_chain = ?", bridgeMetrics.SrcChain, bridgeMetrics.DestChain).Last(oldData).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
-			return err
-		}
-	}
-
-	// get new SingleDirectionBridgeMetrics
-	feeSum := tools.Sum(bridgeMetrics.FeeAmt, oldData.FeeAmt)
-	if feeSum == "" {
-		p.log.Error("sum fee error")
-		return errors.New("sum fee error")
-	}
-
-	newData := &model.SingleDirectionBridgeMetrics{
-		SrcChain:  oldData.SrcChain,
-		DestChain: oldData.DestChain,
-		PktAmt:    bridgeMetrics.PktAmt + oldData.PktAmt,
-		FeeAmt:    bridgeMetrics.FeeAmt + oldData.FeeAmt,
-		FailedAmt: bridgeMetrics.FailedAmt + oldData.FailedAmt,
-		UAmt:      bridgeMetrics.UAmt + oldData.UAmt,
-		TeleAmt:   bridgeMetrics.TeleAmt + oldData.TeleAmt,
-	}
-
-	// insert new SingleDirectionBridgeMetrics
-	if err := p.DB.Create(newData).Error; err != nil {
-		p.log.Errorf("update SingleDirectionBridgeMetrics error:%+v", err)
-		return err
-	}
-	return nil
-}
+// TODO: delete @Meta
+//// get latest bridge metrics and add delta to it and insert it to SingleDirectionBridgeMetrics table
+//func (p *PacketPool) insertSingleDirectionBridgeMetrics(bridgeMetrics *model.SingleDirectionBridgeMetrics) error {
+//	// query SingleDirectionBridgeMetrics
+//	oldData := &model.SingleDirectionBridgeMetrics{}
+//	if err := p.DB.Where("src_chain=? and dest_chain = ?", bridgeMetrics.SrcChain, bridgeMetrics.DestChain).Last(oldData).Error; err != nil {
+//		if err != gorm.ErrRecordNotFound {
+//			p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
+//			return err
+//		}
+//	}
+//
+//	// get new SingleDirectionBridgeMetrics
+//	feeSum := tools.Sum(bridgeMetrics.FeeAmt, oldData.FeeAmt)
+//	if feeSum == "" {
+//		p.log.Error("sum fee error")
+//		return errors.New("sum fee error")
+//	}
+//
+//	newData := &model.SingleDirectionBridgeMetrics{
+//		SrcChain:  oldData.SrcChain,
+//		DestChain: oldData.DestChain,
+//		PktAmt:    bridgeMetrics.PktAmt + oldData.PktAmt,
+//		FeeAmt:    bridgeMetrics.FeeAmt + oldData.FeeAmt,
+//		FailedAmt: bridgeMetrics.FailedAmt + oldData.FailedAmt,
+//		UAmt:      bridgeMetrics.UAmt + oldData.UAmt,
+//		TeleAmt:   bridgeMetrics.TeleAmt + oldData.TeleAmt,
+//	}
+//
+//	// insert new SingleDirectionBridgeMetrics
+//	if err := p.DB.Create(newData).Error; err != nil {
+//		p.log.Errorf("update SingleDirectionBridgeMetrics error:%+v", err)
+//		return err
+//	}
+//	return nil
+//}
 
 // update metrics by calc bridgeTx
-func (p *PacketPool) updateMetrics(bridgeTx *types.BridgeTx) error {
-	// if bridgeTx is nil warn and  return
-	if bridgeTx == nil {
-		p.log.Info("bridgeTx is nil")
-		return nil
-	}
+func (p *PacketPool) updateMetrics(txs []model.CrossChainTransaction) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
-		// travel all bridgeTx
-		for destChainName, txs := range bridgeTx.Txs {
-			// travel all txs
-			// calc pktAmt
-			dPktAmt := int64(len(txs))
-			dFeeAmt := big.NewInt(0)
-			dFailedAmt := int64(0)
-			dUAmt := big.NewInt(0)
-			teleAmt := big.NewInt(0)
-			for _, t := range txs {
-				tmpBig, _ := big.NewInt(0).SetString(strconv.FormatInt(int64(t.PacketFee), 10), 10)
-				dFeeAmt = dFeeAmt.Add(dFeeAmt, tmpBig)
-				status := model.PacketStatus(t.Status)
-				if status == model.Fail || status == model.Refund {
-					dFailedAmt++
+		// travel all txs
+		for _, t := range txs {
+
+			// query SingleDirectionBridgeMetrics id by src_chain and dest_chain
+			bridgeMetrics := &model.SingleDirectionBridgeMetrics{}
+			if err := tx.Where("src_chain=? and dest_chain = ?", t.SrcChain, t.DestChain).First(bridgeMetrics).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					bridgeMetrics.SrcChain = t.SrcChain
+					bridgeMetrics.DestChain = t.DestChain
+					bridgeMetrics.PktAmt = 1
+					if model.PacketStatus(t.Status) == model.Fail || model.PacketStatus(t.Status) == model.Refund {
+						bridgeMetrics.FailedAmt = 1
+					} else {
+						bridgeMetrics.FailedAmt = 0
+					}
+					// insert
+					if err := tx.Create(bridgeMetrics).Error; err != nil {
+						p.log.Errorf("insert SingleDirectionBridgeMetrics error:%+v", err)
+						return err
+					}
+					continue
+				} else {
+					p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
+					return err
 				}
-				if t.TokenName == "usdt" {
-					bigTmp, _ := big.NewInt(0).SetString(t.Amount, 10)
-					dUAmt = dUAmt.Add(dUAmt, bigTmp)
-
-				} else if t.TokenName == "tele" {
-					bigTmp, _ := big.NewInt(0).SetString(t.Amount, 10)
-					teleAmt = teleAmt.Add(teleAmt, bigTmp)
-				}
-
 			}
-
-			// insert singleDirectionBridgeMetrics
-			// fill model
-			dData := &model.SingleDirectionBridgeMetrics{
-				SrcChain:  bridgeTx.SrcChain,
-				DestChain: destChainName,
-				PktAmt:    dPktAmt,
-				FeeAmt:    dFeeAmt.String(),
-				FailedAmt: dFailedAmt,
-				UAmt:      dUAmt.String(),
-				TeleAmt:   teleAmt.String(),
-			}
-			err := p.insertSingleDirectionBridgeMetrics(dData)
-			if err != nil {
-				p.log.Errorf("insert SingleDirectionBridgeMetrics error:%+v", err)
+			// pkt amt +1
+			//SQL update single_direction_bridge_metrics set pkt_amt = pkt_amt+1 where src_chain= ? and dest_chain = ? ;
+			if err := p.DB.Model(&model.SingleDirectionBridgeMetrics{}).Where("id=?", bridgeMetrics.ID).Update("pkt_amt", gorm.Expr("pkt_amt+?", 1)).Error; err != nil {
+				p.log.Errorf("update SingleDirectionBridgeMetrics error:%+v", err)
 				return err
 			}
+
+			// if tx is failed then failed_amt +1
+			//SQL update single_direction_bridge_metrics set failed_amt = failed_amt+1 where src_chain= ? and dest_chain = ? ;
+			if model.PacketStatus(t.Status) == model.Fail || model.PacketStatus(t.Status) == model.Refund {
+				if err := p.DB.Model(&model.SingleDirectionBridgeMetrics{}).Where("id= ?", bridgeMetrics.ID).Update("failed_amt", gorm.Expr("failed_amt+?", 1)).Error; err != nil {
+					p.log.Errorf("update SingleDirectionBridgeMetrics error:%+v", err)
+					return err
+				}
+			}
+
+			// update token table
+			// update token table of fee amount
+			//SQL update token set amt = amt+? where bridge_id = (select id from single_direction_bridge_metrics where src_chain= ? and dest_chain = ? ) and token_type = ?  and token_name=?;
+			if err := p.DB.Model(&model.Token{}).Where("bridge_id = ? and token_type = ? and token_name=?", bridgeMetrics.ID, 0, t.TokenName).Update("amt", gorm.Expr("amt+?", t.PacketFee)).Error; err != nil {
+				p.log.Errorf("update Token error:%+v", err)
+				return err
+			}
+
+			// update token table of value amount
+			//SQL update token set amt = amt+? where bridge_id = (select id from single_direction_bridge_metrics where src_chain= ? and dest_chain = ? ) and token_type = ?  and token_name=?;
+			if err := p.DB.Model(&model.Token{}).Where("bridge_id = ? and token_type = ? and token_name=?", bridgeMetrics.ID, 1, t.TokenName).Update("amt", gorm.Expr("amt+?", t.Amount)).Error; err != nil {
+				p.log.Errorf("update Token error:%+v", err)
+				return err
+			}
+
 		}
 		return nil
 	})
+
 }
 
 // classify the cross chain transaction by different bridges

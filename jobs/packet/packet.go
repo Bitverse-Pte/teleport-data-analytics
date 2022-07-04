@@ -268,7 +268,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				//RelayChain:       ackPacket.RelayChain,
 				DestChain:        ackPacket.DstChain,
 				Sequence:         ackPacket.Sequence,
-				Receiver:         ackPacket.Receiver,
+				//Receiver:         ackPacket.Receiver,
 				Status:           ackPacket.Code,
 				ErrMessage:       ackPacket.ErrMsg,
 				ReceiveTxHash:    ackPacket.TxHash,

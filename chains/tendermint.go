@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/sirupsen/logrus"
 	packettypes "github.com/teleport-network/teleport/x/xibc/core/packet/types"
 	"math/big"
 	"strconv"
@@ -134,6 +135,7 @@ func (c *TendermintClient) GetBlockPackets(height uint64) (*BaseBlockPackets, er
 	if err != nil {
 		return nil, err
 	}
+	logrus.Info(fmt.Sprintf("GetBlockPackets Height:%v,chainName:%v",height,c.ChainName()))
 	var packets BaseBlockPackets
 	for _, tx := range res.Block.GetData().Txs {
 		hash := hex.EncodeToString(tmhash.Sum(tx))

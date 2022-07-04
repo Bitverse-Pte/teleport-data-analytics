@@ -74,7 +74,7 @@ func TestCosmos_GetBlockPackets(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	res,err:= ibcClient.GetBlockPackets(10854653)
+	res,err:= ibcClient.GetBlockPackets(10526015)
 	require.NoError(t, err)
 	t.Logf("res:%+v",res)
 }

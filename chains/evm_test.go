@@ -263,22 +263,22 @@ func TestEth_GetHeightByHash(t *testing.T) {
 }
 
 func TestEth_GetPacket(t *testing.T) {
-	_, err := NewEvmCli(config.EvmConfig{
+	ethcli, err := NewEvmCli(config.EvmConfig{
 		EvmUrl:         "https://rinkeby.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
 		ChainName:      "rinkeby",
 		ChainID:        "4",
 		PacketContract: "0xf7268301384fb751e49fafdacd02c693eabb142c",
 		PacketTopic:    "PacketSent(bytes)",
 		AckTopic:       "AckWritten((string,string,uint64,string,bytes,bytes,string,uint64),bytes)",
+		ReceivedAckTopic: "AckPacket((string,string,uint64,string,bytes,bytes,string,uint64),bytes)",
 		EndPointAddr:   "0xe4916fd50499601dfe4fd2b40ee6d93a8035fcab",
 	})
 	if err != nil {
 		panic(err)
 	}
-	//packets, err := ethcli.getAckPackets(10855039, 10859741)
-	//if err != nil {
-	//	fmt.Printf("%+v", err)
-	//}
+	packets, err := ethcli.getReceivedAcks(10963774, 10964774)
+	require.NoError(t, err)
+	t.Log(packets)
 	//for _, packet := range packets {
 	//	if packet.Ack.Packet.SrcChain == "teleport" && packet.Ack.Packet.DstChain == "rinkeby" && packet.Ack.Packet.Sequence == 15 {
 	//		fmt.Println(packet.Height)

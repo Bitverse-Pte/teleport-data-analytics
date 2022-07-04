@@ -3,16 +3,32 @@ package chains
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
-
 	ethbind "github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	evmtypes "github.com/tharsis/ethermint/x/evm/types"
+	"math/big"
+	"strings"
 )
 
 const DefaultNativeToken = "0x0000000000000000000000000000000000000000"
 
-type tokenQuery struct {
+func NewTokenQuery(chain BlockChain, tokenAddress, tokenName string, decimals uint8) TokenQuery {
+	if strings.Contains(tokenAddress, "0x") {
+		evmcli, ok := chain.(*Evm)
+		if !ok {
+			panic(fmt.Sprintf("invalid erc20 token,chain:%s,tokenName:%s,tokenAddress:%s", chain.ChainName(), tokenName, tokenAddress))
+		}
+		return NewErc20TokenQuery(evmcli, tokenAddress, tokenName)
+	}
+	tendermintCli, ok := chain.(*TendermintClient)
+	if !ok {
+		panic(fmt.Sprintf("invalid token,chain:%s,tokenName:%s,tokenAddress:%s", chain.ChainName(), tokenName, tokenAddress))
+	}
+	return NewTendermintTokenQuery(tendermintCli, tokenAddress, tokenName, decimals)
+}
+
+
+type tokenErc20Query struct {
 	*Evm
 	tokenName  string
 	addressHex string
@@ -20,10 +36,12 @@ type tokenQuery struct {
 	decimals   uint8
 }
 
-func NewTokenQuery(eth *Evm, addressHex, tokenName string) TokenQuery {
+
+
+func NewErc20TokenQuery(eth *Evm, addressHex, tokenName string) TokenQuery {
 	token := getTokenContract()
 	address := common.HexToAddress(addressHex)
-	tQuery := &tokenQuery{
+	tQuery := &tokenErc20Query{
 		contract:   ethbind.NewBoundContract(address, token.ABI, eth.ethClient, eth.ethClient, eth.ethClient),
 		Evm:        eth,
 		addressHex: addressHex,
@@ -46,15 +64,15 @@ func getTokenContract() evmtypes.CompiledContract {
 	return tokenContract
 }
 
-func (t *tokenQuery) AddressHex() string {
+func (t *tokenErc20Query) Address() string {
 	return t.addressHex
 }
 
-func (t *tokenQuery) TokenName() string {
+func (t *tokenErc20Query) TokenName() string {
 	return t.tokenName
 }
 
-func (t *tokenQuery) GetErc20TotalSupply(blockNumber *big.Int) (TokenAmount, error) {
+func (t *tokenErc20Query) GetErc20TotalSupply(blockNumber *big.Int) (TokenAmount, error) {
 	var out []interface{}
 	var total TokenAmount
 	opts := new(ethbind.CallOpts)
@@ -77,11 +95,11 @@ func (t *tokenQuery) GetErc20TotalSupply(blockNumber *big.Int) (TokenAmount, err
 	return TokenAmount{}, fmt.Errorf("invalid totalSupply type")
 }
 
-func (t *tokenQuery) QueryTotalBurnToken() (TokenAmount, error) {
+func (t *tokenErc20Query) QueryTotalBurnToken() (TokenAmount, error) {
 	return TokenAmount{}, nil
 }
 
-func (t *tokenQuery) getErc20Decimals() (uint8, error) {
+func (t *tokenErc20Query) getErc20Decimals() (uint8, error) {
 	if t.decimals != 0 {
 		return t.decimals, nil
 	}
@@ -98,14 +116,14 @@ func (t *tokenQuery) getErc20Decimals() (uint8, error) {
 	}
 	return 0, fmt.Errorf("invalid decimals type")
 }
-func (t *tokenQuery) GetDecimals() (uint8, error) {
+func (t *tokenErc20Query) GetDecimals() (uint8, error) {
 	if t.NativeToken() == t.TokenName() {
 		return t.Evm.GetNativeDecimal()
 	}
 	return t.getErc20Decimals()
 }
 
-func (t *tokenQuery) GetTokenBalance(addressHex string, blockNumber *big.Int) (TokenAmount, error) {
+func (t *tokenErc20Query) GetTokenBalance(addressHex string, blockNumber *big.Int) (TokenAmount, error) {
 	var balanceQuery func(addressHex string, blockNumber *big.Int) (TokenAmount, error)
 	if t.addressHex == DefaultNativeToken {
 		balanceQuery = t.Evm.GetBalance
@@ -115,7 +133,7 @@ func (t *tokenQuery) GetTokenBalance(addressHex string, blockNumber *big.Int) (T
 	return balanceQuery(addressHex, blockNumber)
 }
 
-func (t *tokenQuery) GetErc20Balance(addressHex string, blockNumber *big.Int) (TokenAmount, error) {
+func (t *tokenErc20Query) GetErc20Balance(addressHex string, blockNumber *big.Int) (TokenAmount, error) {
 	address := common.HexToAddress(addressHex)
 	var (
 		out    []interface{}
@@ -141,7 +159,7 @@ func (t *tokenQuery) GetErc20Balance(addressHex string, blockNumber *big.Int) (T
 	return amount, fmt.Errorf("invalid balance type")
 }
 
-func (t *tokenQuery) GetTransferBalance(blockNumber *big.Int) (TokenAmount, error) {
+func (t *tokenErc20Query) GetTransferBalance(blockNumber *big.Int) (TokenAmount, error) {
 	var (
 		amount TokenAmount
 		err    error
@@ -154,7 +172,7 @@ func (t *tokenQuery) GetTransferBalance(blockNumber *big.Int) (TokenAmount, erro
 	return amount, err
 }
 
-func (t *tokenQuery) GetInTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error) {
+func (t *tokenErc20Query) GetInTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error) {
 	decimals, err := t.GetDecimals()
 	if err != nil {
 		return TokenAmount{}, err
@@ -167,7 +185,7 @@ func (t *tokenQuery) GetInTokenAmount(addressHex string, srcChain string, blockN
 	return tokenAmount, nil
 }
 
-func (t *tokenQuery) GetOutTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error) {
+func (t *tokenErc20Query) GetOutTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error) {
 	decimals, err := t.GetDecimals()
 	if err != nil {
 		return TokenAmount{}, err
@@ -178,4 +196,63 @@ func (t *tokenQuery) GetOutTokenAmount(addressHex string, srcChain string, block
 	}
 	tokenAmount.Decimals = decimals
 	return tokenAmount, nil
+}
+
+type tendermintTokenQuery struct {
+	*TendermintClient
+	tokenName string
+	denom     string
+	decimals  uint8
+}
+
+func NewTendermintTokenQuery(tendermintCli *TendermintClient, denom, tokenName string, decimals uint8) TokenQuery {
+	tQuery := tendermintTokenQuery{
+		TendermintClient: tendermintCli,
+		tokenName:        tokenName,
+		denom:            denom,
+		decimals:         decimals,
+	}
+	return &tQuery
+}
+
+func (t *tendermintTokenQuery) Address() string {
+	return t.denom
+}
+
+func (t *tendermintTokenQuery) TokenName() string {
+	return t.tokenName
+}
+
+func (t *tendermintTokenQuery) GetErc20TotalSupply(blockNumber *big.Int) (TokenAmount, error) {
+	// TODO
+	return TokenAmount{}, fmt.Errorf("invalid totalSupply type")
+}
+
+func (t *tendermintTokenQuery) getErc20Decimals() (uint8, error) {
+	// TODO
+	return 0, fmt.Errorf("invalid decimals type")
+}
+func (t *tendermintTokenQuery) GetDecimals() (uint8, error) {
+	// TODO decimals
+	return t.decimals, nil
+}
+
+func (t *tendermintTokenQuery) GetTokenBalance(addressHex string, blockNumber *big.Int) (TokenAmount, error) {
+	return t.TendermintClient.GetTokenBalance(t.denom, addressHex)
+}
+
+func (t *tendermintTokenQuery) GetErc20Balance(addressHex string, blockNumber *big.Int) (TokenAmount, error) {
+	return TokenAmount{}, fmt.Errorf("invalid balance type")
+}
+
+func (t *tendermintTokenQuery) GetTransferBalance(blockNumber *big.Int) (TokenAmount, error) {
+	return TokenAmount{}, nil
+}
+
+func (t *tendermintTokenQuery) GetInTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error) {
+	return TokenAmount{}, nil
+}
+
+func (t *tendermintTokenQuery) GetOutTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error) {
+	return TokenAmount{}, nil
 }

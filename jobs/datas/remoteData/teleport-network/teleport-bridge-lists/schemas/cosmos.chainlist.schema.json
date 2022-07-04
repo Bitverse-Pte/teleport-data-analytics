@@ -1,10 +1,21 @@
 {
-    "$schema": "http://json-schema.org/draft-06/schema#",
-    "$ref": "#/definitions/Welcome1",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Cosmos Chain List Schema",
+    "type": "object",
+    "properties": {
+        "chains": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Chain"
+            }
+        }
+    },
+    "required": [
+        "chains"
+    ],
     "definitions": {
         "CosmosChains": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
                 "chains": {
                     "type": "array",
@@ -20,7 +31,6 @@
         },
         "Chain": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
                 "chainId": {
                     "type": "string"
@@ -64,8 +74,7 @@
                     }
                 },
                 "coinType": {
-                    "type": "string",
-                    "format": "integer"
+                    "type": "string"
                 },
                 "gasPriceStep": {
                     "$ref": "#/definitions/GasPriceStep"
@@ -88,7 +97,6 @@
         },
         "Bech32Config": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
                 "bech32PrefixAccAddr": {
                     "type": "string"
@@ -121,11 +129,9 @@
         },
         "Bip44": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
                 "coinType": {
-                    "type": "string",
-                    "format": "integer"
+                    "type": "string"
                 }
             },
             "required": [
@@ -135,7 +141,6 @@
         },
         "Currency": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
                 "coinDenom": {
                     "type": "string"
@@ -144,8 +149,7 @@
                     "type": "string"
                 },
                 "coinDecimals": {
-                    "type": "string",
-                    "format": "integer"
+                    "type": "string"
                 }
             },
             "required": [
@@ -157,7 +161,6 @@
         },
         "GasPriceStep": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
                 "low": {
                     "type": "string"

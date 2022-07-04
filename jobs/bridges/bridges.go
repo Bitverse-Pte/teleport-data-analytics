@@ -49,20 +49,15 @@ func NewBridge(log *logrus.Logger, db *gorm.DB, bridges map[string]datas.BridgeI
 			log.Infof("chainID: %v not support", srcChainID)
 			continue
 		}
-		chainACli := chainA.(*chains.Evm)
 		destChainID := bridge.DestChain.ChainId
 		chainB := chainMap[destChainID]
 		if chainB == nil {
 			log.Infof("chainID: %v not support", destChainID)
 			continue
 		}
-		chainBCli := chainB.(*chains.Evm)
-		if bridge.SrcChain.IsTele == nil {
-			continue
-		}
 		for _, bridgeToken := range bridge.Tokens {
-			chainAToken := chains.NewTokenQuery(chainACli, bridgeToken.SrcToken.Address, bridgeToken.Name)
-			chainBToken := chains.NewTokenQuery(chainBCli, bridgeToken.DestToken.Address, bridgeToken.Name)
+			chainAToken := chains.NewTokenQuery(chainA, bridgeToken.SrcToken.Address, bridgeToken.Name,uint8(bridgeToken.SrcToken.Decimals))
+			chainBToken := chains.NewTokenQuery(chainB, bridgeToken.DestToken.Address, bridgeToken.Name,uint8(bridgeToken.DestToken.Decimals))
 			bridgeTokenMap[fmt.Sprintf("%v/%v/%v", chains.TeleportChain, chainB.ChainName(), bridgeToken.Name)] = &BridgeToken{chainAToken, chainBToken}
 			addressToName[fmt.Sprintf("%v/%v", bridge.SrcChain.Name, bridgeToken.SrcToken.Address)] = bridgeToken.Name
 			addressToName[fmt.Sprintf("%v/%v", bridge.DestChain.Name, bridgeToken.DestToken.Address)] = bridgeToken.Name

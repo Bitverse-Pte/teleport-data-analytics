@@ -37,8 +37,8 @@ func (r *Bridges) Reconcile(teleportPacket, otherPacket ReconciliationPacket) (m
 	if bridgeToken == nil {
 		return bridgeReconcileResult, fmt.Errorf("bridgeToken not found,bridgeTokenMapKey:%v", bridgeTokenMapKey)
 	}
-	teleportPacket.SrcAddress = bridgeToken.ChainAToken.AddressHex()
-	otherPacket.SrcAddress = bridgeToken.ChainBToken.AddressHex()
+	teleportPacket.SrcAddress = bridgeToken.ChainAToken.Address()
+	otherPacket.SrcAddress = bridgeToken.ChainBToken.Address()
 	sumA, err := r.getSumAmount(teleportPacket)
 	if err != nil {
 		r.log.Errorf("get teleportPacket sum amount error:%+v", err)
@@ -67,10 +67,10 @@ func (r *Bridges) Reconcile(teleportPacket, otherPacket ReconciliationPacket) (m
 		coefficientA = 1
 		coefficientB = -1
 	}
-	teleportAmount, err := getChainATokenAmount(bridgeToken.ChainAToken.AddressHex(), bridgeToken.ChainBToken.ChainName(), big.NewInt(int64(teleportPacket.SrcHeight))) //TODO do not use
+	teleportAmount, err := getChainATokenAmount(bridgeToken.ChainAToken.Address(), bridgeToken.ChainBToken.ChainName(), big.NewInt(int64(teleportPacket.SrcHeight))) //TODO do not use
 	if err != nil {
 		r.log.Errorf("get chainA token amount error:%v\n,chainName:%v,tokenName:%v,tokenAddress:%v,height:%v",
-			err, bridgeToken.ChainAToken.ChainName(), tokenName, bridgeToken.ChainAToken.AddressHex(), teleportPacket.SrcHeight)
+			err, bridgeToken.ChainAToken.ChainName(), tokenName, bridgeToken.ChainAToken.Address(), teleportPacket.SrcHeight)
 		return bridgeReconcileResult, err
 	}
 	r.log.Infof("teleport chain %v amount:%v", bridgeToken.ChainAToken.ChainName(), teleportAmount)
@@ -82,7 +82,7 @@ func (r *Bridges) Reconcile(teleportPacket, otherPacket ReconciliationPacket) (m
 	amount, err := getChainBTokenAmount(big.NewInt(int64(otherPacket.SrcHeight)))
 	if err != nil {
 		r.log.Errorf("get chainA  token amount error:%v\\n,chainName:%v,tokenName:%v,tokenAddress:%v,height:%v",
-			err, bridgeToken.ChainBToken.ChainName(), tokenName, bridgeToken.ChainBToken.AddressHex(), otherPacket.SrcHeight)
+			err, bridgeToken.ChainBToken.ChainName(), tokenName, bridgeToken.ChainBToken.Address(), otherPacket.SrcHeight)
 		return bridgeReconcileResult, err
 	}
 	r.log.Infof("teleport chain %v amount:%v", bridgeToken.ChainBToken.ChainName(), amount)
@@ -97,11 +97,11 @@ func (r *Bridges) Reconcile(teleportPacket, otherPacket ReconciliationPacket) (m
 	bridgeReconcileResult = model.BridgeReconcileResult{
 		TokenName:      tokenName,
 		SrcChain:       bridgeToken.ChainAToken.ChainName(),
-		SrcToken:       bridgeToken.ChainAToken.AddressHex(),
+		SrcToken:       bridgeToken.ChainAToken.Address(),
 		SrcAmount:      defaultTokenAmount,
 		SrcTrimAmount:  sumA,
 		DestChain:      bridgeToken.ChainBToken.ChainName(),
-		DestToken:      bridgeToken.ChainBToken.AddressHex(),
+		DestToken:      bridgeToken.ChainBToken.Address(),
 		DestAmount:     otherAmount,
 		DestTrimAmount: sumB,
 		Result:         "success",

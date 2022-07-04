@@ -33,7 +33,7 @@
                 }
             ]
         },
-            {
+        {
             "name": "Bsc Testnet",
             "title": "Bsc test net",
             "chain": "BSC",
@@ -70,7 +70,7 @@
             "title": "Teleport Testnet",
             "chain": "Teleport",
             "rpc": [
-                "https://dataseed.testnet.teleport.network"
+                "https://evm-rpc.testnet.teleport.network"
             ],
             "faucets": [],
             "nativeCurrency": {
@@ -87,8 +87,41 @@
                 {
                     "name": "Teleport testnet EVM Explorer (Blockscout)",
                     "url": "https://evm-explorer.testnet.teleport.network",
-                    "standard": "none",
+                    "standard": "src",
                     "icon": "https://static-files.teleport.network/logo/teleport_logo.png"
+                },
+                {
+                    "name": "Teleport testnet Tendermint Explorer (Blockscout)",
+                    "url": "https://explorer.testnet.teleport.network",
+                    "standard": "dest",
+                    "icon": "https://static-files.teleport.network/logo/teleport_logo.png"
+                }
+            ]
+        },
+        {
+            "name": "Arbitrum Testnet",
+            "title": "Arbitrum Testnet",
+            "chain": "Arbitrum",
+            "rpc": [
+                "https://rinkeby.arbitrum.io/rpc"
+            ],
+            "faucets": [],
+            "nativeCurrency": {
+                "name": "eth",
+                "symbol": "eth",
+                "decimals": 18
+            },
+            "infoURL": "",
+            "shortName": "Arbitrum Testnet",
+            "chainId": 421611,
+            "networkId": 421611,
+            "icon": "https://static-files.teleport.network/logo/arbitrum_logo.svg",
+            "explorers": [
+                {
+                    "name": "",
+                    "url": "https://rinkeby-explorer.arbitrum.io",
+                    "standard": "none",
+                    "icon": "https://static-files.teleport.network/logo/arbitrum_logo.svg"
                 }
             ]
         }

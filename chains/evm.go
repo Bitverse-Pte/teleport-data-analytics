@@ -49,6 +49,7 @@ type Evm struct {
 	packetAddr       string
 	packetTopic      string
 	ackTopic         string
+	receivedAckTopic string
 	agentAddr        string
 	EndPointAddr     string
 	frequency        int
@@ -63,9 +64,6 @@ type Evm struct {
 func NewEvmCli(evmCfg config.EvmConfig) (*Evm, error) {
 	chainCfg := evmCfg
 	chainName := chainCfg.ChainName
-	if chainName == "teleport-evm" {
-		chainName = "teleport"
-	}
 	rpcClient, err := rpc.DialContext(context.Background(), chainCfg.EvmUrl)
 	if err != nil {
 		return nil, err
@@ -93,6 +91,7 @@ func NewEvmCli(evmCfg config.EvmConfig) (*Evm, error) {
 		packetAddr:       chainCfg.PacketContract,
 		packetTopic:      chainCfg.PacketTopic,
 		ackTopic:         chainCfg.AckTopic,
+		receivedAckTopic: chainCfg.ReceivedAckTopic,
 		frequency:        chainCfg.Frequency,
 		batchNumber:      chainCfg.BatchNumber,
 		tokenContract:    getTokenContract(), // TODO fix
@@ -105,14 +104,6 @@ func NewEvmCli(evmCfg config.EvmConfig) (*Evm, error) {
 		revisedHeight:    evmCfg.RevisedHeight,
 	}, nil
 }
-
-//func getAgentContract() evmtypes.CompiledContract {
-//	var agentContract evmtypes.CompiledContract
-//	if err := json.Unmarshal(agent.AgentJSON, &agentContract); err != nil {
-//		panic(err)
-//	}
-//	return agentContract
-//}
 
 func getEvmEndpointContract() evmtypes.CompiledContract {
 	var endpointContract evmtypes.CompiledContract
@@ -282,8 +273,8 @@ func (eth *Evm) GetHeightByHash(hash string) (uint64, error) {
 	return recept.BlockNumber.Uint64(), nil
 }
 
-func (eth *Evm) GetPackets(fromBlock, toBlock uint64) ([]*BlockPackets, error) {
-	bizPackets, err := eth.getPackets(fromBlock, toBlock)
+func (eth *Evm) GetPackets(fromBlock, toBlock uint64) ([]*BaseBlockPackets, error) {
+	Packets, err := eth.getPackets(fromBlock, toBlock)
 	if err != nil {
 		return nil, err
 	}
@@ -291,18 +282,23 @@ func (eth *Evm) GetPackets(fromBlock, toBlock uint64) ([]*BlockPackets, error) {
 	if err != nil {
 		return nil, err
 	}
-	packets := &BlockPackets{
-		BizPackets: bizPackets,
-		AckPackets: ackPackets,
+	receivedAcks, err := eth.getReceivedAcks(fromBlock, toBlock)
+	if err != nil {
+		return nil, err
 	}
-	return []*BlockPackets{packets}, nil
+	packets := &BaseBlockPackets{
+		Packets:     Packets,
+		AckPackets:  ackPackets,
+		RecivedAcks: receivedAcks,
+	}
+	return []*BaseBlockPackets{packets}, nil
 }
 
 func (eth *Evm) GetLightClientHeight(chainName string) (uint64, error) {
 	return 0, nil
 }
 
-func (eth *Evm) GetPacketsByHash(txHash string) ([]PacketTx, error) {
+func (eth *Evm) GetPacketsByHash(txHash string) ([]BasePacketTx, error) {
 	tx, err := eth.ethClient.TransactionReceipt(context.Background(), common.HexToHash(txHash))
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -345,7 +341,7 @@ func (eth *Evm) GetGasPrice() (*big.Int, error) {
 }
 
 func (eth *Evm) GetPacketFee(srcChain, dstChain string, sequence int) (*PacketFee, error) {
-	key := fmt.Sprintf("%s/%s/%s", srcChain, dstChain, strconv.Itoa(sequence))
+	key := fmt.Sprintf("%s/%s", dstChain, strconv.Itoa(sequence))
 	packetFee, err := eth.packet.PacketFees(nil, []byte(key))
 	if err != nil {
 		log.Err(err).Str("key", key).Msg("fail to query PacketFees from contract ")
@@ -362,7 +358,7 @@ func (eth *Evm) GetPacketFee(srcChain, dstChain string, sequence int) (*PacketFe
 }
 
 // get packets from block
-func (eth *Evm) getPackets(fromBlock, toBlock uint64) ([]PacketTx, error) {
+func (eth *Evm) getPackets(fromBlock, toBlock uint64) ([]BasePacketTx, error) {
 	address := common.HexToAddress(eth.packetAddr)
 	topic := eth.packetTopic
 	logs, err := eth.getLogs(address, topic, fromBlock, toBlock)
@@ -370,7 +366,7 @@ func (eth *Evm) getPackets(fromBlock, toBlock uint64) ([]PacketTx, error) {
 		return nil, err
 	}
 
-	var bizPackets []PacketTx
+	var Packets []BasePacketTx
 	for _, log := range logs {
 		packSent, err := eth.packet.ParsePacketSent(log)
 		if err != nil {
@@ -399,19 +395,27 @@ func (eth *Evm) getPackets(fromBlock, toBlock uint64) ([]PacketTx, error) {
 		if err := packet.ABIDecode(packSent.PacketBytes); err != nil {
 			return nil, err
 		}
-		tmpPack := PacketTx{
-			Packet: packettypes.Packet{
-				Sequence: packet.Sequence,
-				SrcChain: packet.SrcChain,
-				DstChain: packet.DstChain,
-				Sender:   packet.Sender,
-				// transfer data. keep empty if not used.
-				TransferData: packet.TransferData,
-				// call data. keep empty if not used
-				CallData:        packet.CallData,
-				CallbackAddress: packet.CallbackAddress,
-				FeeOption:       packet.FeeOption,
-			},
+		if packet.TransferData == nil {
+			continue
+		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(packet.TransferData); err != nil {
+			return nil, err
+		}
+		a := big.Int{}
+		amount := a.SetBytes(transferData.Amount)
+		tmpPack := BasePacketTx{
+			Sequence: packet.Sequence,
+			SrcChain: packet.SrcChain,
+			DstChain: packet.DstChain,
+			Sender:   packet.Sender,
+			// transfer data. keep empty if not used.
+			//TransferData: transferData.,
+			Receiver: transferData.Receiver,
+			Amount:   amount.String(),
+			Token:    transferData.Token,
+			OriToken: transferData.OriToken,
+
 			TxHash:    log.TxHash.String(),
 			Height:    log.BlockNumber,
 			Signer:    msg.From(),
@@ -419,14 +423,16 @@ func (eth *Evm) getPackets(fromBlock, toBlock uint64) ([]PacketTx, error) {
 			Gas:       tx.Gas(),
 			GasPrice:  gasPrice,
 		}
+		tmpPack.SrcChainId = chainMap[chainMap.GetXIBCChainKey(tmpPack.SrcChain)]
+		tmpPack.DestChainId = chainMap[chainMap.GetXIBCChainKey(tmpPack.DstChain)]
 
-		bizPackets = append(bizPackets, tmpPack)
+		Packets = append(Packets, tmpPack)
 	}
-	return bizPackets, nil
+	return Packets, nil
 }
 
-func (eth *Evm) handlePacketLog(logs []*ethtypes.Log) ([]PacketTx, error) {
-	var bizPackets []PacketTx
+func (eth *Evm) handlePacketLog(logs []*ethtypes.Log) ([]BasePacketTx, error) {
+	var Packets []BasePacketTx
 	for _, log := range logs {
 		packSent, err := eth.packet.ParsePacketSent(*log)
 		if err != nil {
@@ -454,19 +460,24 @@ func (eth *Evm) handlePacketLog(logs []*ethtypes.Log) ([]PacketTx, error) {
 		if err := packet.ABIDecode(packSent.PacketBytes); err != nil {
 			return nil, err
 		}
-		tmpPack := PacketTx{
-			Packet: packettypes.Packet{
-				Sequence: packet.Sequence,
-				SrcChain: packet.SrcChain,
-				DstChain: packet.DstChain,
-				Sender:   packet.Sender,
-				// transfer data. keep empty if not used.
-				TransferData: packet.TransferData,
-				// call data. keep empty if not used
-				CallData:        packet.CallData,
-				CallbackAddress: packet.CallbackAddress,
-				FeeOption:       packet.FeeOption,
-			},
+		if packet.TransferData == nil {
+			continue
+		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(packet.TransferData); err != nil {
+			return nil, err
+		}
+		a := big.Int{}
+		amount := a.SetBytes(transferData.Amount)
+		tmpPack := BasePacketTx{
+			Sequence:  packet.Sequence,
+			SrcChain:  packet.SrcChain,
+			DstChain:  packet.DstChain,
+			Sender:    packet.Sender,
+			Receiver:  transferData.Receiver,
+			Amount:    amount.String(),
+			Token:     transferData.Token,
+			OriToken:  transferData.OriToken,
 			TxHash:    log.TxHash.String(),
 			Height:    log.BlockNumber,
 			Signer:    msg.From(),
@@ -475,13 +486,13 @@ func (eth *Evm) handlePacketLog(logs []*ethtypes.Log) ([]PacketTx, error) {
 			GasPrice:  gasPrice,
 		}
 
-		bizPackets = append(bizPackets, tmpPack)
+		Packets = append(Packets, tmpPack)
 	}
-	return bizPackets, nil
+	return Packets, nil
 }
 
 // get ack packets from block
-func (eth *Evm) getAckPackets(fromBlock, toBlock uint64) ([]AckTx, error) {
+func (eth *Evm) getAckPackets(fromBlock, toBlock uint64) ([]BasePacketTx, error) {
 	address := common.HexToAddress(eth.packetAddr)
 	topic := eth.ackTopic
 	logs, err := eth.getLogs(address, topic, fromBlock, toBlock)
@@ -489,13 +500,12 @@ func (eth *Evm) getAckPackets(fromBlock, toBlock uint64) ([]AckTx, error) {
 		return nil, err
 	}
 
-	var ackPackets []AckTx
+	var ackPackets []BasePacketTx
 	for _, log := range logs {
 		ackWritten, err := eth.packet.ParseAckWritten(log)
 		if err != nil {
 			return nil, err
 		}
-		tmpAckPack := AckTx{}
 		tx, _, err := eth.ethClient.TransactionByHash(context.Background(), log.TxHash)
 		if err != nil {
 			return nil, err
@@ -508,19 +518,84 @@ func (eth *Evm) getAckPackets(fromBlock, toBlock uint64) ([]AckTx, error) {
 		if err != nil {
 			return nil, err
 		}
-		tmpAckPack.Ack.Packet = packettypes.Packet{
+		if ackWritten.Packet.TransferData == nil {
+			continue
+		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(ackWritten.Packet.TransferData); err != nil {
+			return nil, err
+		}
+		var ack packettypes.Acknowledgement
+		if err := ack.ABIDecode(ackWritten.Ack); err != nil {
+			return nil, err
+		}
+		status, msg := eth.getStatus(ack)
+		tmpAckPack := BasePacketTx{
 			Sequence: ackWritten.Packet.Sequence,
 			SrcChain: ackWritten.Packet.SrcChain,
 			DstChain: ackWritten.Packet.DstChain,
-			Sender:   ackWritten.Packet.Sender,
-			// transfer data. keep empty if not used.
-			TransferData: ackWritten.Packet.TransferData,
-			// call data. keep empty if not used
-			CallData:        ackWritten.Packet.CallData,
-			CallbackAddress: ackWritten.Packet.CallbackAddress,
-			FeeOption:       ackWritten.Packet.FeeOption,
+			Code:     status,
+			ErrMsg:   msg,
 		}
-		tmpAckPack.Ack.Acknowledgement = ackWritten.Ack
+		tmpAckPack.TxHash = log.TxHash.String()
+		tmpAckPack.Height = log.BlockNumber
+		tmpAckPack.TimeStamp = time.Unix(int64(block.Time()), 0).Local()
+		tmpAckPack.Gas = tx.Gas()
+		tmpAckPack.GasPrice = gasPrice
+		ackPackets = append(ackPackets, tmpAckPack)
+	}
+	return ackPackets, nil
+}
+
+// get ack packets from block
+func (eth *Evm) getReceivedAcks(fromBlock, toBlock uint64) ([]BasePacketTx, error) {
+	address := common.HexToAddress(eth.packetAddr)
+	topic := eth.ackTopic
+	logs, err := eth.getLogs(address, topic, fromBlock, toBlock)
+	if err != nil {
+		return nil, err
+	}
+	var ackPackets []BasePacketTx
+	for _, log := range logs {
+		packetAckPacket, err := eth.packet.ParseAckPacket(log)
+		if err != nil {
+			return nil, err
+		}
+		tx, _, err := eth.ethClient.TransactionByHash(context.Background(), log.TxHash)
+		if err != nil {
+			return nil, err
+		}
+		gasPrice, err := BigInt{tx.GasPrice()}.Float64()
+		if err != nil {
+			return nil, err
+		}
+		block, err := eth.ethClient.BlockByNumber(context.Background(), big.NewInt(int64(log.BlockNumber)))
+		if err != nil {
+			return nil, err
+		}
+		if packetAckPacket.Packet.TransferData == nil {
+			continue
+		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(packetAckPacket.Packet.TransferData); err != nil {
+			return nil, err
+		}
+		var ack packettypes.Acknowledgement
+		if err := ack.ABIDecode(packetAckPacket.Ack); err != nil {
+			return nil, err
+		}
+		status, _ := eth.getStatus(ack)
+		if status != Fail {
+			continue
+		}
+		tmpAckPack := BasePacketTx{
+			Sequence: packetAckPacket.Packet.Sequence,
+			SrcChain: packetAckPacket.Packet.SrcChain,
+			DstChain: packetAckPacket.Packet.DstChain,
+			Sender:   packetAckPacket.Packet.Sender,
+			Receiver: transferData.Receiver,
+			Code:     Refund,
+		}
 		tmpAckPack.TxHash = log.TxHash.String()
 		tmpAckPack.Height = log.BlockNumber
 		tmpAckPack.TimeStamp = time.Unix(int64(block.Time()), 0).Local()
@@ -562,4 +637,16 @@ func (eth *Evm) getAgentLogs(address common.Address, topic string, fromBlock, to
 		}
 	}
 	return ret, err
+}
+
+func (eth *Evm) getStatus(ack packettypes.Acknowledgement) (int8, string) {
+	var status int8
+	var ackMsg string
+	if ack.Code == 0 {
+		status = Success
+	} else {
+		status = Fail
+		ackMsg = ack.GetMessage()
+	}
+	return status, ackMsg
 }

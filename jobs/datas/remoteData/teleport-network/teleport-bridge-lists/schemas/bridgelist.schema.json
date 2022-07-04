@@ -1,44 +1,6 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Bridge List",
-    "definitions": {
-        "Token": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "srcToken": {
-                    "type": "string"
-                },
-                "destToken": {
-                    "type": "string"
-                }
-            },
-            "required": [
-                "name",
-                "srcToken",
-                "destToken"
-            ]
-        },
-        "Bridge": {
-            "type": "object",
-            "properties": {
-                "srcChain": {
-                    "type": "string"
-                },
-                "destChain": {
-                    "type": "string"
-                },
-                "tokens": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/Token"
-                    }
-                }
-            }
-        }
-    },
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Bridge List Schema",
     "type": "object",
     "properties": {
         "bridges": {
@@ -50,5 +12,103 @@
     },
     "required": [
         "bridges"
-    ]
+    ],
+    "definitions": {
+        "Bridge": {
+            "type": "object",
+            "properties": {
+                "srcChain": {
+                    "$ref": "#/definitions/BridgeChain"
+                },
+                "destChain": {
+                    "$ref": "#/definitions/BridgeChain"
+                },
+                "agentAddress": {
+                    "type": "string"
+                },
+                "tokens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Token"
+                    }
+                }
+            },
+            "required": [
+                "srcChain",
+                "destChain",
+                "tokens"
+            ]
+        },
+        "BridgeChain": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "chain_id": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "is_tele": {
+                    "type": "boolean"
+                },
+                "transfer": {
+                    "$ref": "#/definitions/Invoke"
+                },
+                "proxy": {
+                    "$ref": "#/definitions/Invoke"
+                },
+                "multi_call": {
+                    "$ref": "#/definitions/Invoke"
+                },
+                "packet": {
+                    "$ref": "#/definitions/Invoke"
+                }
+            },
+            "required": [
+                "name",
+                "chain_id"
+            ]
+        },
+        "Invoke": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "abi": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "address",
+                "abi"
+            ]
+        },
+        "Token": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "pairType": {
+                    "type": "string"
+                },
+                "srcToken": {
+                    "type": "string"
+                },
+                "destToken": {
+                    "type": "string"
+                },
+                "relayToken": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name"
+            ]
+        }
+    }
 }

@@ -19,7 +19,6 @@ func sendHttpRequest(method, url string, body io.Reader, header map[string]strin
 	if err != nil {
 		return []byte{}, err
 	}
-	//设置请求头
 	setHeaders(req, &header)
 	cli := http.Client{
 		Timeout: 45 * time.Second,
@@ -56,7 +55,6 @@ func Post(url string, body io.Reader, header map[string]string) ([]byte, error) 
 	return sendHttpRequest("POST", url, body, header)
 }
 
-// post请求，并且json unmarshal
 func PostAndUnmarshal(url string, body io.Reader, header map[string]string, respPointer interface{}) error {
 	byt, err := Post(url, body, header)
 	if err != nil {

@@ -1,8 +1,12 @@
 package chains
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/teleport-network/teleport-data-analytics/tools"
+	packettypes "github.com/teleport-network/teleport/x/xibc/core/packet/types"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -146,6 +150,39 @@ func TestTeleport_NewToken(t *testing.T) {
 
 }
 
+func TestTeleport_GetPacketFee(t *testing.T) {
+	cfg := config.EvmConfig{
+		EvmUrl:         "http://abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:8545",
+		ChainName:      "teleport",
+		ChainID:        "7001",
+		PacketContract: "0x0000000000000000000000000000000020000001",
+		PacketTopic:    packetTopic,
+		AckTopic:       ackTopic,
+		EndPointAddr:   "0x0000000000000000000000000000000020000002",
+		AgentAddr:      agentAddr,
+		AgentTopic:     agentTopic,
+	}
+	ethcli, err := NewEvmCli(cfg)
+	require.NoError(t, err)
+	packetTxs, err := ethcli.getPackets(1149646, 1249646)
+	fmt.Println(packetTxs)
+
+	//packetFee,err := ethcli.GetPacketFee("teleport","arbitrum",39)
+	//fmt.Println(packetFee)
+
+	//packets:= []packettypes.Packet{packetTxs[0]}
+	//for _,p := range packetTxs {
+	// packets = append(packets, p.Packet)
+	// fmt.Println("dest_chain:",p.Packet.DstChain)
+	//}
+	//b, _ := json.Marshal(packets)
+	//res,err := tools.Post("https://bridge.qa.davionlabs.com/bridge/status",bytes.NewBuffer(b),nil)
+	//if err != nil {
+	//	fmt.Println(err)
+	//}
+	//fmt.Println(string(res))
+}
+
 func TestTeleport_GetMultiInfo(t *testing.T) {
 	cfg := config.EvmConfig{
 		EvmUrl:         "http://abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:8545",
@@ -174,13 +211,24 @@ func TestTeleport_GetMultiInfo(t *testing.T) {
 		StartHeight:        1,
 		BalanceMonitorings: nil,
 	}
-	teleCli, err := NewTeleport(tendermintCfg, ethcli)
+	_ = NewTeleport(tendermintCfg, ethcli,nil)
 	if err != nil {
 		fmt.Println(err)
 	}
-	packets, err := teleCli.GetPackets(1180875, 1180875)
-	fmt.Println("packets1:", packets[0].BizPackets[0].MultiId)
-	fmt.Println("packets2:", packets[0].AckPackets[0].MultiId)
+	//packetTxs, err := teleCli.GetPackets(1249646, 1249646)
+	packets:= []packettypes.Packet{}
+	fmt.Println(packets)
+	//for _,p := range packetTxs {
+	// packets = append(packets, p.Packet)
+	// fmt.Println("dest_chain:",p.Packet.DstChain)
+	//}
+	b, _ := json.Marshal(packets)
+	res,err := tools.Post("https://bridge.qa.davionlabs.com/bridge/status",bytes.NewBuffer(b),nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(string(res))
+
 	//var transferData  packettypes.TransferData
 	//transferData.ABIDecode(packets[0].Packet.TransferData)
 	//fmt.Println("receiver:",transferData.Receiver)
@@ -215,7 +263,7 @@ func TestEth_GetHeightByHash(t *testing.T) {
 }
 
 func TestEth_GetPacket(t *testing.T) {
-	ethcli, err := NewEvmCli(config.EvmConfig{
+	_, err := NewEvmCli(config.EvmConfig{
 		EvmUrl:         "https://rinkeby.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
 		ChainName:      "rinkeby",
 		ChainID:        "4",
@@ -227,15 +275,15 @@ func TestEth_GetPacket(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	packets, err := ethcli.getAckPackets(10855039, 10859741)
-	if err != nil {
-		fmt.Printf("%+v", err)
-	}
-	for _, packet := range packets {
-		if packet.Ack.Packet.SrcChain == "teleport" && packet.Ack.Packet.DstChain == "rinkeby" && packet.Ack.Packet.Sequence == 15 {
-			fmt.Println(packet.Height)
-		}
-	}
+	//packets, err := ethcli.getAckPackets(10855039, 10859741)
+	//if err != nil {
+	//	fmt.Printf("%+v", err)
+	//}
+	//for _, packet := range packets {
+	//	if packet.Ack.Packet.SrcChain == "teleport" && packet.Ack.Packet.DstChain == "rinkeby" && packet.Ack.Packet.Sequence == 15 {
+	//		fmt.Println(packet.Height)
+	//	}
+	//}
 	//packets, err := ethcli.GetPacketsByHash("0x0f68049c46c6d7a6b114da75dc81d1ec39643ae8e678a8ab235575d4a31c6663")
 	//if err != nil {
 	//	fmt.Printf("%+v", err)

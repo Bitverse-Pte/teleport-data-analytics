@@ -30,7 +30,7 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 	log := logrus.New()
 	cs := make(map[string]chains.BlockChain)
 	var balanceMonitorings []*monitoring.BalanceMonitoring
-	chainMap := make(map[string]string)
+	chainMap := chains.NewChainMap()
 	chainCliMap := make(map[string]chains.BlockChain)
 	for _, evmCfg := range cfg.EvmChains {
 		evmChain, err := chains.NewEvmCli(evmCfg)
@@ -39,25 +39,38 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 		} else {
 			logrus.Printf("NewEvmCli %v success", evmCfg.ChainName)
 		}
-		chainMap[evmChain.ChainName()] = evmCfg.ChainID
+		chainMap[chainMap.GetXIBCChainKey(evmChain.ChainName())] = evmCfg.ChainID
 		chainCliMap[evmCfg.ChainID] = evmChain
 		cs[evmCfg.ChainName] = evmChain
 		for _, token := range evmCfg.BalanceMonitorings {
-			tokenQuery := chains.NewTokenQuery(evmChain, token.AddressHex, token.TokenName)
+			tokenQuery := chains.NewTokenQuery(evmChain, token.AddressHex, token.TokenName,0)
 			balanceMonitoring := monitoring.NewBalanceMonitoring(tokenQuery, token.Accounts)
 			balanceMonitorings = append(balanceMonitorings, balanceMonitoring)
 		}
 	}
-	teleportEvm := cs[cfg.Teleport.ChainName]
+	teleEvm := cs[cfg.Teleport.ChainName]
+	teleportEvm := teleEvm
+	for _, tendermintCfg := range cfg.TendermintChains {
+		tendermintCli, err := chains.NewTendermintClient(tendermintCfg)
+		if err != nil {
+			panic(fmt.Errorf("chains.NewEvmCli error:%v\nchainName:%v,chainID:%v", err.Error(), tendermintCfg.ChainName, tendermintCfg.ChainID))
+		} else {
+			logrus.Printf("NewTendermintClient %v success", tendermintCfg.ChainName)
+		}
+		chainMap[chainMap.GetIBCChainKey(tendermintCfg.ChainName)] = tendermintCfg.ChainID
+		chainCliMap[tendermintCfg.ChainID] = tendermintCli
+		cs[tendermintCfg.ChainName] = tendermintCli
+		for _, token := range tendermintCfg.BalanceMonitorings {
+			tokenQuery := chains.NewTokenQuery(tendermintCli, token.AddressHex, token.TokenName,0)
+			balanceMonitoring := monitoring.NewBalanceMonitoring(tokenQuery, token.Accounts)
+			balanceMonitorings = append(balanceMonitorings, balanceMonitoring)
+		}
+	}
+	teleportTendermint := cs[cfg.Teleport.ChainName]
 	if teleportEvm == nil {
 		log.Fatalln("teleport evm client not init")
 	}
-	teleChain, err := chains.NewTeleport(cfg.Teleport, teleportEvm)
-	if err != nil {
-		panic(err)
-	} else {
-		logrus.Printf("NewTeleport client  %v success", teleChain.ChainName())
-	}
+	teleChain := chains.NewTeleport(cfg.Teleport, teleportEvm,teleportTendermint)
 	if cfg.Teleport.AgentAddr != "" {
 		logrus.Infof("teleport agent addr:%voverwrite default：%v", cfg.Teleport.AgentAddr, chains.AgentContract)
 		chains.AgentContract = cfg.Teleport.AgentAddr

@@ -135,7 +135,6 @@ func (c *TendermintClient) GetBlockPackets(height uint64) (*BaseBlockPackets, er
 	if err != nil {
 		return nil, err
 	}
-	logrus.Info(fmt.Sprintf("GetBlockPackets Height:%v,chainName:%v",height,c.ChainName()))
 	var packets BaseBlockPackets
 	for _, tx := range res.Block.GetData().Txs {
 		hash := hex.EncodeToString(tmhash.Sum(tx))
@@ -221,7 +220,7 @@ func (c *TendermintClient) GetBlockPackets(height uint64) (*BaseBlockPackets, er
 		}
 		tmpReceivedAcks, err := c.getRecievedAcks(stringEvents)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("getRecievedAcks error:%v,chainName:%v,height:%v",err,c.chainName,height)
 		}
 		for _, tmpReceivedAck := range tmpReceivedAcks {
 			var ibcAckReceivedTx BasePacketTx
@@ -399,7 +398,9 @@ func (c *TendermintClient) getRecievedAcks(stringEvents sdk.StringEvents) ([]IBC
 	dstChannel := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyDstChannel)
 	dstPort := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyDstPort)
 	packetDatas := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyData)
-	//channelOrderings := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyChannelOrdering)
+	if !(len(sequences) == len(srcChannel)&& len(sequences) == len(srcPort) && len(sequences) == len(dstChannel) && len(sequences) == len(dstPort)){
+		return nil,fmt.Errorf("invalid getRecievedAcks")
+	}
 	var ibcAcks []IBCAck
 	for i := 0; i < len(sequences); i++ {
 		sequenceStr := sequences[i]

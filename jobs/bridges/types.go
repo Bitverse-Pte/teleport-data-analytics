@@ -1,6 +1,8 @@
 package bridges
 
-import "math/big"
+import (
+	"math/big"
+)
 
 type PacketToken struct {
 	AddressHex  string

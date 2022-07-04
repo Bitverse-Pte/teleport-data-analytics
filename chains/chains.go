@@ -7,8 +7,8 @@ import (
 )
 
 type BlockChain interface {
-	GetPackets(fromBlock, toBlock uint64) ([]*BlockPackets, error)
-	GetPacketsByHash(txHash string) ([]PacketTx, error)
+	GetPackets(fromBlock, toBlock uint64) ([]*BaseBlockPackets, error)
+	GetPacketsByHash(txHash string) ([]BasePacketTx, error)
 	GetLightClientHeight(chainName string) (uint64, error)
 	GetTokenLimit(addr common.Address, blockNumber *big.Int) (TokenLimit, error)
 	GetNativeDecimal() (uint8, error)
@@ -36,6 +36,6 @@ type TokenQuery interface {
 	GetOutTokenAmount(addressHex string, srcChain string, blockNumber *big.Int) (TokenAmount, error)
 	ChainName() string
 	NativeToken() string
-	AddressHex() string
+	Address() string
 	TokenName() string
 }

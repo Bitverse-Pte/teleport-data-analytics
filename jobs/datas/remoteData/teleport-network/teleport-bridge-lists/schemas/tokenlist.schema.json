@@ -1,5 +1,5 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "http://json-schema.org/draft-04/schema#",
     "title": "Token List",
     "description": "Schema for lists of tokens compatible with the Uniswap Interface",
     "definitions": {
@@ -212,7 +212,7 @@
                 "address": {
                     "type": "string",
                     "description": "The checksummed address of the token on the specified chain ID",
-                    "pattern": "^0x[a-fA-F0-9]{40}$",
+                    "pattern": "[a-zA-Z0-9/-]{2,127}",
                     "examples": [
                         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
                     ]
@@ -286,7 +286,7 @@
             "type": "string",
             "description": "The name of the token list",
             "minLength": 1,
-            "maxLength": 20,
+            "maxLength": 100,
             "pattern": "^[\\w ]+$",
             "examples": [
                 "My Token List"
@@ -349,7 +349,6 @@
         "logoURI": {
             "type": "string",
             "description": "A URI for the logo of the token list; prefer SVG or PNG of size 256x256",
-            "format": "uri",
             "examples": [
                 "ipfs://QmXfzKRvjZz3u5JRgC4v5mGVbm9ahrUiB4DgzHBsnWbTMM"
             ]

@@ -10,13 +10,22 @@ import (
 	packettypes "github.com/teleport-network/teleport/x/xibc/core/packet/types"
 )
 
-var AgentContract = "0x0000000000000000000000000000000010000007"
+var AgentContract = "0x0000000000000000000000000000000040000001"
+
+var chainMap ChainMap
 
 const (
 	DefaultTolerate float64 = 10
 	TeleportChain           = "teleport"
 	DefaultToken            = "tele"
 	ZeroAddress             = "0x0000000000000000000000000000000000000000"
+)
+
+const (
+	Pending int8 = iota + 1
+	Success
+	Fail
+	Refund
 )
 
 type PacketTx struct {
@@ -28,6 +37,34 @@ type PacketTx struct {
 	Gas       uint64
 	GasPrice  float64
 	MultiId   string
+}
+
+type BasePacketTx struct {
+	SrcChain    string
+	DstChain    string
+	Sequence    uint64
+	SrcChainId  string
+	DestChainId string
+	Sender      string
+	Receiver    string
+	Amount      string
+	Token       string
+	OriToken    string
+	TxHash      string
+	TimeStamp   time.Time
+	Height      uint64
+	Signer      common.Address
+	Gas         uint64
+	GasPrice    float64
+	MultiId     string
+	Code        int8
+	ErrMsg      string
+}
+
+type BaseBlockPackets struct {
+	Packets     []BasePacketTx
+	AckPackets  []BasePacketTx
+	RecivedAcks []BasePacketTx
 }
 
 type AckTx struct {
@@ -154,4 +191,22 @@ type TokenLimit struct {
 	MinAmount      *big.Int `json:"minAmount"`
 	PreviousTime   *big.Int `json:"previousTime"`
 	CurrentSupply  *big.Int `json:"currentSupply"`
+}
+
+type ChainMap map[string]string
+
+func NewChainMap() ChainMap {
+	chainMap = make(map[string]string)
+	return chainMap
+}
+
+func (cm ChainMap) GetIBCChainKey(chainName string) string {
+	if chainName == TeleportChain {
+		return fmt.Sprintf("%s-%s", chainName, "ibc")
+	}
+	return chainName
+}
+
+func (cm ChainMap) GetXIBCChainKey(chainName string) string {
+	return chainName
 }

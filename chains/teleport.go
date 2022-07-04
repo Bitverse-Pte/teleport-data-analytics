@@ -11,12 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
-	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
-	xibcbsc "github.com/teleport-network/teleport/x/xibc/clients/light-clients/bsc/types"
-	xibceth "github.com/teleport-network/teleport/x/xibc/clients/light-clients/eth/types"
-	xibctendermint "github.com/teleport-network/teleport/x/xibc/clients/light-clients/tendermint/types"
 	clienttypes "github.com/teleport-network/teleport/x/xibc/core/client/types"
 	"github.com/teleport-network/teleport/x/xibc/exported"
 
@@ -37,6 +31,7 @@ const DefaultDenom = "atele"
 
 type Teleport struct {
 	evm           *Evm
+	tendermint    *TendermintClient
 	teleportSDK   *client.TeleportClient
 	Codec         *codec.ProtoCodec
 	chainName     string
@@ -46,40 +41,27 @@ type Teleport struct {
 	startHeight   uint64
 }
 
-func NewTeleport(cfg config.TendermintConfig, evmCli BlockChain) (*Teleport, error) {
+func NewTeleport(cfg config.TendermintConfig, evmCli, tendermintClient BlockChain) *Teleport {
 	cdc := makeCodec()
-	cli, err := client.NewClient(cfg.Url, cfg.ChainID)
-	if err != nil {
-		panic(fmt.Errorf("NewTeleport err:%+v", err))
-	}
 	evm, ok := evmCli.(*Evm)
 	if !ok {
 		panic("invalid evmCli")
 	}
+	tendermint, ok := tendermintClient.(*TendermintClient)
+	if !ok {
+		panic("invalid tendermintClient")
+	}
 	return &Teleport{
 		evm:           evm,
+		tendermint:    tendermint,
 		Codec:         cdc,
 		chainName:     cfg.ChainName,
-		teleportSDK:   cli,
+		teleportSDK:   tendermint.tendermintSDK,
 		frequency:     cfg.Frequency,
 		batchNumber:   cfg.BatchNumber,
 		startHeight:   cfg.StartHeight,
 		revisedHeight: cfg.RevisedHeight,
-	}, err
-}
-
-func makeCodec() *codec.ProtoCodec {
-	ir := codectypes.NewInterfaceRegistry()
-	clienttypes.RegisterInterfaces(ir)
-	govtypes.RegisterInterfaces(ir)
-	xibcbsc.RegisterInterfaces(ir)
-	xibctendermint.RegisterInterfaces(ir)
-	xibceth.RegisterInterfaces(ir)
-	packettypes.RegisterInterfaces(ir)
-	ir.RegisterInterface("cosmos.v1beta1.Msg", (*sdk.Msg)(nil))
-	typestx.RegisterInterfaces(ir)
-	cryptocodec.RegisterInterfaces(ir)
-	return codec.NewProtoCodec(ir)
+	}
 }
 
 func (t *Teleport) GetBalance(address string) (string, error) {
@@ -127,10 +109,6 @@ func (t *Teleport) ChainName() string {
 	return t.evm.ChainName()
 }
 
-//func (t *Teleport) GetMultiInfo(heights []uint64) ([]MultiInfo, error) {
-//	return t.evm.GetMultiInfo(heights)
-//}
-
 func (t *Teleport) GetGasPrice() (*big.Int, error) {
 	return t.evm.GetGasPrice()
 }
@@ -163,9 +141,9 @@ func (t *Teleport) GetPacketFee(srcChain, dstChain string, sequence int) (*Packe
 	return t.evm.GetPacketFee(srcChain, dstChain, sequence)
 }
 
-func (t *Teleport) GetPackets(fromBlock, toBlock uint64) ([]*BlockPackets, error) {
+func (t *Teleport) GetPackets(fromBlock, toBlock uint64) ([]*BaseBlockPackets, error) {
 	times := toBlock - fromBlock + 1
-	Packets := make([]*BlockPackets, times)
+	Packets := make([]*BaseBlockPackets, times)
 	var l sync.Mutex
 	var wg sync.WaitGroup
 	wg.Add(int(times))
@@ -191,15 +169,15 @@ func (t *Teleport) GetPackets(fromBlock, toBlock uint64) ([]*BlockPackets, error
 	return Packets, nil
 }
 
-func (t *Teleport) GetPacketsByHash(txHash string) ([]PacketTx, error) {
+func (t *Teleport) GetPacketsByHash(txHash string) ([]BasePacketTx, error) {
 	// Invalid query
 	return t.evm.GetPacketsByHash(txHash)
 }
 
-func (t *Teleport) GetBlockPackets(height uint64) (*BlockPackets, error) {
-	var bizPackets []PacketTx
-	var ackPackets []AckTx
-	var recivedAcks []AckTx
+func (t *Teleport) GetBlockPackets(height uint64) (*BaseBlockPackets, error) {
+	var bizPackets []BasePacketTx
+	var ackPackets []BasePacketTx
+	var receivedAcks []BasePacketTx
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	res, err := t.teleportSDK.TMServiceQuery.GetBlockByHeight(ctx, &tmservice.GetBlockByHeightRequest{
@@ -208,9 +186,10 @@ func (t *Teleport) GetBlockPackets(height uint64) (*BlockPackets, error) {
 	if err != nil {
 		return nil, err
 	}
-	var packets BlockPackets
+	var packets BaseBlockPackets
 	for _, tx := range res.Block.GetData().Txs {
 		hash := hex.EncodeToString(tmhash.Sum(tx))
+		// TODO
 		res, err := t.teleportSDK.TxClient.GetTx(ctx, &typestx.GetTxRequest{
 			Hash: hash,
 		})
@@ -234,17 +213,16 @@ func (t *Teleport) GetBlockPackets(height uint64) (*BlockPackets, error) {
 		for i := range tmpPackets {
 			// only packet has ethereumTxHash
 			tmpPackets[i].TxHash = ethereumTxHash
-			if ethereumTxHash == "" {
-				tmpPackets[i].MultiId = hash
-			}
 			tmpPackets[i].TimeStamp = txTime
 			tmpPackets[i].Height = height
 			// Avoid parsing whenever possible
 			if len(tmpPackets) > 1 {
-				if tmpPackets[i].Packet.Sender == t.evm.agentAddr {
+				if tmpPackets[i].Sender == t.evm.agentAddr {
 					tmpPackets[i].MultiId = fmt.Sprintf("%v/%v", hash, packetId)
 					packetId++
 				}
+			} else {
+				tmpPackets[i].MultiId = hash
 			}
 		}
 		bizPackets = append(bizPackets, tmpPackets...)
@@ -257,25 +235,18 @@ func (t *Teleport) GetBlockPackets(height uint64) (*BlockPackets, error) {
 			tmpAckPacks[i].TxHash = hash
 			tmpAckPacks[i].TimeStamp = txTime
 			tmpAckPacks[i].Height = height
-			tmpAckPacks[i].MultiId = hash
 			// Avoid parsing whenever possible
 			if len(tmpAckPacks) > 1 {
-				var ft packettypes.TransferData
-				if err := ft.ABIDecode(tmpAckPacks[i].Ack.Packet.TransferData); err != nil {
-					return nil, err
-				}
-				var ack packettypes.Acknowledgement
-				if err := ack.ABIDecode(tmpAckPacks[i].Ack.Acknowledgement); err != nil {
-					return nil, err
-				}
-				if ft.Receiver == t.evm.agentAddr && ack.Code == 0 {
+				if tmpAckPacks[i].Receiver == t.evm.agentAddr && tmpAckPacks[i].Code == 0 {
 					tmpAckPacks[i].MultiId = fmt.Sprintf("%v/%v", hash, ackId)
 					ackId++
 				}
+			} else {
+				tmpAckPacks[i].MultiId = hash
 			}
 		}
 		ackPackets = append(ackPackets, tmpAckPacks...)
-		tmpReceivedAck, err := t.getRecievedAcks(stringEvents)
+		tmpReceivedAck, err := t.getReceivedAcks(stringEvents)
 		if err != nil {
 			return nil, err
 		}
@@ -284,17 +255,21 @@ func (t *Teleport) GetBlockPackets(height uint64) (*BlockPackets, error) {
 			tmpReceivedAck[i].TimeStamp = txTime
 			tmpReceivedAck[i].Height = height
 		}
-		recivedAcks = append(recivedAcks, tmpReceivedAck...)
+		receivedAcks = append(receivedAcks, tmpReceivedAck...)
 	}
-	packets.BizPackets = bizPackets
-	packets.AckPackets = ackPackets
-	packets.RecivedAcks = recivedAcks
+	ibcPacket, err := t.tendermint.GetBlockPackets(height)
+	if err != nil {
+		return nil, err
+	}
+	packets.Packets = append(bizPackets, ibcPacket.Packets...)
+	packets.AckPackets = append(ackPackets, ibcPacket.AckPackets...)
+	packets.RecivedAcks = append(receivedAcks, ibcPacket.RecivedAcks...)
 	return &packets, nil
 }
 
-func (t *Teleport) getPackets(stringEvents sdk.StringEvents) ([]PacketTx, error) {
+func (t *Teleport) getPackets(stringEvents sdk.StringEvents) ([]BasePacketTx, error) {
 	protoEvents := getEventsVals("xibc.core.packet.v1.EventSendPacket", stringEvents)
-	var packets []PacketTx
+	var packets []BasePacketTx
 	for _, protoEvent := range protoEvents {
 		event, ok := protoEvent.(*packettypes.EventSendPacket)
 		if !ok {
@@ -304,9 +279,27 @@ func (t *Teleport) getPackets(stringEvents sdk.StringEvents) ([]PacketTx, error)
 		if err := packet.ABIDecode(event.Packet); err != nil {
 			return nil, err
 		}
-		tmpPack := PacketTx{
-			Packet: packet,
+		if packet.TransferData == nil {
+			continue
 		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(packet.TransferData); err != nil {
+			return nil, err
+		}
+		a := big.Int{}
+		amount := a.SetBytes(transferData.Amount)
+		tmpPack := BasePacketTx{
+			Sequence: packet.Sequence,
+			SrcChain: packet.SrcChain,
+			DstChain: packet.DstChain,
+			Sender:   packet.Sender,
+			Receiver: transferData.Receiver,
+			Amount:   amount.String(),
+			Token:    transferData.Token,
+			OriToken: transferData.OriToken,
+		}
+		tmpPack.SrcChainId = chainMap[chainMap.GetXIBCChainKey(tmpPack.SrcChain)]
+		tmpPack.DestChainId = chainMap[chainMap.GetXIBCChainKey(tmpPack.DstChain)]
 		packets = append(packets, tmpPack)
 	}
 	return packets, nil
@@ -316,41 +309,91 @@ func (t *Teleport) getEthereumTxHash(stringEvents sdk.StringEvents) (string, err
 	return getValue("ethereum_tx", "ethereumTxHash", stringEvents)
 }
 
-func (t *Teleport) getAckPackets(stringEvents sdk.StringEvents) ([]AckTx, error) {
+func (t *Teleport) getAckPackets(stringEvents sdk.StringEvents) ([]BasePacketTx, error) {
 	protoEvents := getEventsVals("xibc.core.packet.v1.EventWriteAck", stringEvents)
-	var ackPackets []AckTx
+	var ackPackets []BasePacketTx
 	for _, protoEvent := range protoEvents {
 		event, ok := protoEvent.(*packettypes.EventWriteAck)
 		if !ok {
 			return nil, fmt.Errorf("proto parse failed")
 		}
-		var tmpPack packettypes.Packet
-		if err := tmpPack.ABIDecode(event.Packet); err != nil {
+		var packet packettypes.Packet
+		if err := packet.ABIDecode(event.Packet); err != nil {
 			return nil, err
 		}
-		var ackPacket AckTx
-		ackPacket.Ack.Packet = tmpPack
-		ackPacket.Ack.Acknowledgement = event.Ack
+		if packet.TransferData == nil {
+			continue
+		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(packet.TransferData); err != nil {
+			return nil, err
+		}
+		var ack packettypes.Acknowledgement
+		if err := ack.ABIDecode(event.Ack); err != nil {
+			return nil, err
+		}
+		status, msg := t.getStatus(ack)
+		a := big.Int{}
+		amount := a.SetBytes(transferData.Amount)
+		ackPacket := BasePacketTx{
+			Sequence: packet.Sequence,
+			SrcChain: packet.SrcChain,
+			DstChain: packet.DstChain,
+			Sender:   packet.Sender,
+			// transfer data. keep empty if not used.
+			Receiver: transferData.Receiver,
+			Amount:   amount.String(),
+			Token:    transferData.Token,
+			OriToken: transferData.OriToken,
+			Code:     status,
+			ErrMsg:   msg,
+		}
 		ackPackets = append(ackPackets, ackPacket)
 	}
 	return ackPackets, nil
 }
 
-func (t *Teleport) getRecievedAcks(stringEvents sdk.StringEvents) ([]AckTx, error) {
+func (t *Teleport) getReceivedAcks(stringEvents sdk.StringEvents) ([]BasePacketTx, error) {
 	protoEvents := getEventsVals("xibc.core.packet.v1.EventAcknowledgePacket", stringEvents)
-	var ackPackets []AckTx
+	var ackPackets []BasePacketTx
 	for _, protoEvent := range protoEvents {
 		event, ok := protoEvent.(*packettypes.EventAcknowledgePacket)
 		if !ok {
 			return nil, fmt.Errorf("proto parse failed")
 		}
-		var tmpPack packettypes.Packet
-		if err := tmpPack.ABIDecode(event.Packet); err != nil {
+		var packet packettypes.Packet
+		if err := packet.ABIDecode(event.Packet); err != nil {
 			return nil, err
 		}
-		var ackPacket AckTx
-		ackPacket.Ack.Packet = tmpPack
-		ackPacket.Ack.Acknowledgement = event.Ack
+		if packet.TransferData == nil {
+			continue
+		}
+		var transferData packettypes.TransferData
+		if err := transferData.ABIDecode(packet.TransferData); err != nil {
+			return nil, err
+		}
+		var ack packettypes.Acknowledgement
+		if err := ack.ABIDecode(event.Ack); err != nil {
+			return nil, err
+		}
+		status, _ := t.getStatus(ack)
+		if status != Fail {
+			continue
+		}
+		a := big.Int{}
+		amount := a.SetBytes(transferData.Amount)
+		ackPacket := BasePacketTx{
+			Sequence: packet.Sequence,
+			SrcChain: packet.SrcChain,
+			DstChain: packet.DstChain,
+			//Sender:   packet.Sender,
+			// transfer data. keep empty if not used.
+			//TransferData: transferData.,
+			//Receiver:  transferData.Receiver,
+			Amount:   amount.String(),
+			Token:    transferData.Token,
+			OriToken: transferData.OriToken,
+		}
 		ackPackets = append(ackPackets, ackPacket)
 	}
 	return ackPackets, nil
@@ -389,4 +432,16 @@ func getValue(typ, key string, se sdk.StringEvents) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("not found type:%s key:%s", typ, key)
+}
+
+func (t *Teleport) getStatus(ack packettypes.Acknowledgement) (int8, string) {
+	var status int8
+	var ackMsg string
+	if ack.Code == 0 {
+		status = Success
+	} else {
+		status = Fail
+		ackMsg = ack.GetMessage()
+	}
+	return status, ackMsg
 }

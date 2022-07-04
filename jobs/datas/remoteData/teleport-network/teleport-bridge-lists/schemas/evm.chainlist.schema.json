@@ -1,6 +1,18 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Chain List",
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "EVM Chain List Schema",
+    "type": "object",
+    "properties": {
+        "chains": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Chain"
+            }
+        }
+    },
+    "required": [
+        "chains"
+    ],
     "definitions": {
         "EvmChains": {
             "type": "object",
@@ -108,18 +120,20 @@
                 "networkId",
                 "explorers"
             ]
-        }
-    },
-    "type": "object",
-    "properties": {
-        "chains": {
-            "type": "array",
-            "items": {
-                "$ref": "#/definitions/Chain"
+        },
+        "Explorer": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "standard": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
             }
         }
-    },
-    "required": [
-        "chains"
-    ]
+    }
 }

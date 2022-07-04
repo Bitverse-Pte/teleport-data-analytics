@@ -78,6 +78,8 @@ type CrossChainTransaction struct {
 	RelayChain           string    `gorm:"type:varchar(20);uniqueIndex:ck_t"`
 	DestChain            string    `gorm:"type:varchar(20);uniqueIndex:ck_t"`
 	Sequence             uint64    `gorm:"column:sequence;uniqueIndex:ck_t"`
+	SrcChainId           string    `gorm:"column:src_chain_id"`
+	DestChainId          string    `gorm:"column:dest_chain_id"`
 	Amount               string    `gorm:"column:amount"` // TODO to float
 	SrcAmountFloat       float64   `gorm:"column:src_amount_float"`
 	AmountFloat          float64   `gorm:"column:amount_float"`

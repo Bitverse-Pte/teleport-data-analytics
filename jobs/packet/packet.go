@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -33,16 +34,16 @@ import (
 )
 
 type PacketPool struct {
-	Codec             *codec.ProtoCodec
-	DB                *gorm.DB
-	log               *logrus.Logger
-	Chains            map[string]chains.BlockChain
-	ChainMap          map[string]string
-	IDToName          map[string]string
-	NameToID          map[string]string
-	ReconcileEnable   bool
-	ReconciliationCli *bridges.Bridges
-	MetricsManager    *metrics.MetricManager
+	Codec           *codec.ProtoCodec
+	DB              *gorm.DB
+	log             *logrus.Logger
+	Chains          map[string]chains.BlockChain
+	ChainMap        map[string]string
+	IDToName        map[string]string
+	NameToID        map[string]string
+	ReconcileEnable bool
+	BridegesManager *bridges.Bridges
+	MetricsManager  *metrics.MetricManager
 }
 
 const (
@@ -50,20 +51,20 @@ const (
 	Ack    = "ack"
 )
 
-func NewPacketDBPool(db *gorm.DB, log *logrus.Logger, chain map[string]chains.BlockChain, chainMap map[string]string, reconciliationCli *bridges.Bridges, reconcileEnable bool, metricsManager *metrics.MetricManager) *PacketPool {
+func NewPacketDBPool(db *gorm.DB, log *logrus.Logger, chain map[string]chains.BlockChain, chainMap map[string]string, bridgesManager *bridges.Bridges, reconcileEnable bool, metricsManager *metrics.MetricManager) *PacketPool {
 	cdc := makeCodec()
 	if err := db.AutoMigrate(&model.SyncState{}, &model.CrossPacket{}, &model.PacketRelation{}, &model.BridgeReconcileResult{}, &model.Record{}, &model.BlockReconcileResult{}, &model.CrossChainTransaction{}, &model.GlobalMetrics{}, &model.SingleDirectionBridgeMetrics{}, &model.Token{}); err != nil {
 		panic(fmt.Errorf("db.AutoMigrate:%+v", err))
 	}
 	return &PacketPool{
-		Codec:             cdc,
-		DB:                db,
-		log:               log,
-		Chains:            chain,
-		ChainMap:          chainMap,
-		ReconcileEnable:   reconcileEnable,
-		ReconciliationCli: reconciliationCli,
-		MetricsManager:    metricsManager,
+		Codec:           cdc,
+		DB:              db,
+		log:             log,
+		Chains:          chain,
+		ChainMap:        chainMap,
+		ReconcileEnable: reconcileEnable,
+		BridegesManager: bridgesManager,
+		MetricsManager:  metricsManager,
 	}
 }
 
@@ -170,59 +171,51 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 		return fmt.Errorf("get nativeDecimal error:%s", err.Error())
 	}
 	for _, pkts := range packets {
-		for _, pt := range pkts.BizPackets {
-			if pt.Packet.TransferData == nil {
-				continue
-			}
-			var transferData packettypes.TransferData
-			if err := transferData.ABIDecode(pt.Packet.TransferData); err != nil {
-				return err
-			}
-			a := big.Int{}
-			amount := a.SetBytes(transferData.Amount)
-			sender := pt.Packet.Sender
+		for _, pt := range pkts.Packets {
+			sender := pt.Sender
 			if pt.Signer != common.BytesToAddress([]byte{0x00}) {
 				sender = pt.Signer.Hex()
 			}
 			crossChainTx := model.CrossChainTransaction{
-				SrcChain: pt.Packet.SrcChain,
-				//RelayChain:       pt.Packet.RelayChain,
-				DestChain:        pt.Packet.DstChain,
-				Sequence:         pt.Packet.Sequence,
+				SrcChain:         pt.SrcChain,
+				DestChain:        pt.DstChain,
+				Sequence:         pt.Sequence,
 				Sender:           sender,
-				Receiver:         transferData.Receiver,
-				SendTokenAddress: transferData.Token,
+				Receiver:         pt.Receiver,
+				SendTokenAddress: pt.Token,
 				Status:           int8(model.Pending),
 				SendTxHash:       pt.TxHash,
 				SendTxTime:       pt.TimeStamp,
 				SrcHeight:        pt.Height,
-				AmountRaw:        a.String(),
+				AmountRaw:        pt.Amount,
 				MultiID2:         pt.MultiId,
+				SrcChainId:       pt.SrcChainId,
+				DestChainId:      pt.DestChainId,
 			}
 			var crossChainTransaction model.CrossChainTransaction
-			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
+			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.SrcChain, pt.DstChain, pt.Sequence).Find(&crossChainTransaction).Error; err != nil {
 				return err
 			}
 			var tokenName string
 			if crossChainTransaction.TokenName == "" {
-				tokenName = p.ReconciliationCli.GetTokenNameByAddress(pt.Packet.SrcChain, transferData.Token)
+				tokenName = p.BridegesManager.GetTokenNameByAddress(pt.SrcChain, pt.Token)
 				if tokenName == "" {
-					p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.Packet.SrcChain, transferData.Token, pt.Packet.DstChain, pt.Packet.Sequence)
+					p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.SrcChain, pt.Token, pt.DstChain, pt.Sequence)
 					continue
 				}
 				crossChainTx.TokenName = tokenName
 			} else {
 				tokenName = crossChainTransaction.TokenName
 			}
-			if pt.Packet.SrcChain == chains.TeleportChain {
-				key := fmt.Sprintf("%v/%v/%v", pt.Packet.SrcChain, pt.Packet.DstChain, tokenName)
-				crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainBToken.AddressHex()
+			if pt.SrcChain == chains.TeleportChain {
+				key := fmt.Sprintf("%v/%v/%v", pt.SrcChain, pt.DstChain, tokenName)
+				crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainBToken.Address()
 			} else {
-				key := fmt.Sprintf("%v/%v/%v", pt.Packet.DstChain, pt.Packet.SrcChain, tokenName)
-				crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainAToken.AddressHex()
+				key := fmt.Sprintf("%v/%v/%v", pt.DstChain, pt.SrcChain, tokenName)
+				crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainAToken.Address()
 			}
 			srcChain := chain
-			packetFee, err := srcChain.GetPacketFee(pt.Packet.SrcChain, pt.Packet.DstChain, int(pt.Packet.Sequence))
+			packetFee, err := srcChain.GetPacketFee(pt.SrcChain, pt.DstChain, int(pt.Sequence))
 			if err != nil {
 				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
@@ -230,7 +223,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				p.log.Infoln("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-				decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
+				decimals, err := p.BridegesManager.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
 				if err != nil {
 					p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 					return err
@@ -242,13 +235,15 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				crossChainTx.PacketFeePaid = fee
 			}
 			if crossChainTransaction.AmountFloat == 0 {
-				teleportDecimal, otherDecimal, err := p.ReconciliationCli.GetBridgeTokenDecimals(pt.Packet.SrcChain, tokenName, pt.Packet.DstChain)
+				teleportDecimal, otherDecimal, err := p.BridegesManager.GetBridgeTokenDecimals(pt.SrcChain, tokenName, pt.DstChain)
 				if err != nil {
-					p.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt.Packet, Packet, pt.TxHash)
+					p.log.Errorf("BridegesManager.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt, Packet, pt.TxHash)
 					return err
 				}
 				var amountFloat float64
-				if pt.Packet.DstChain == chains.TeleportChain {
+				amount := new(big.Int)
+				amount.SetString(pt.Amount, 10)
+				if pt.DstChain == chains.TeleportChain {
 					tokenAmount := &chains.TokenAmount{Amount: amount}
 					amountFloat, err = tokenAmount.Float64()
 					amountFloat = amountFloat * math.Pow10(int(teleportDecimal)-int(otherDecimal))
@@ -257,7 +252,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 					amountFloat, err = tokenAmount.Float64()
 				}
 				if err != nil {
-					p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt.Packet)
+					p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt)
 					return err
 				}
 				amountStr := fmt.Sprintf("%.0f", amountFloat)
@@ -265,36 +260,22 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				crossChainTx.Amount = amountStr
 				crossChainTx.AmountFloat = amountFloat
 			}
-			if pt.Packet.Sender == chains.AgentContract {
+			if pt.Sender == chains.AgentContract {
 				crossChainTx.MultiID2 = pt.MultiId
 			}
 			crossChainTxs = append(crossChainTxs, crossChainTx)
 		}
 		for _, ackPacket := range pkts.AckPackets {
-			if ackPacket.Ack.Packet.TransferData == nil {
-				continue
-			}
-			var transferData packettypes.TransferData
-			if err := transferData.ABIDecode(ackPacket.Ack.Packet.TransferData); err != nil {
-				return err
-			}
-			var ack packettypes.Acknowledgement
-			if err := ack.ABIDecode(ackPacket.Ack.Acknowledgement); err != nil {
-				return err
-			}
-			a := big.Int{}
-			amount := a.SetBytes(transferData.Amount)
-			status, msg := getStatus(ack)
 			crossChainTx := model.CrossChainTransaction{
-				SrcChain: ackPacket.Ack.Packet.SrcChain,
-				//RelayChain:       ackPacket.Ack.Packet.RelayChain,
-				DestChain:        ackPacket.Ack.Packet.DstChain,
-				Sequence:         ackPacket.Ack.Packet.Sequence,
-				Receiver:         transferData.Receiver,
-				Status:           int8(status),
-				ErrMessage:       msg,
+				SrcChain: ackPacket.SrcChain,
+				//RelayChain:       ackPacket.RelayChain,
+				DestChain:        ackPacket.DstChain,
+				Sequence:         ackPacket.Sequence,
+				Receiver:         ackPacket.Receiver,
+				Status:           ackPacket.Code,
+				ErrMessage:       ackPacket.ErrMsg,
 				ReceiveTxHash:    ackPacket.TxHash,
-				SendTokenAddress: transferData.Token,
+				SendTokenAddress: ackPacket.Token,
 				ReceiveTxTime:    ackPacket.TimeStamp,
 				DestHeight:       ackPacket.Height,
 				// An Ack is generated where a packet is received
@@ -304,15 +285,15 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				MultiID1:       ackPacket.MultiId,
 			}
 			var crossChainTransaction model.CrossChainTransaction
-			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
-				p.log.Errorf("query db error:%+v\n,where src_chain = %v and dest_chain = %v and sequence = %v", err, ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence)
+			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackPacket.SrcChain, ackPacket.DstChain, ackPacket.Sequence).Find(&crossChainTransaction).Error; err != nil {
+				p.log.Errorf("query db error:%+v\n,where src_chain = %v and dest_chain = %v and sequence = %v", err, ackPacket.SrcChain, ackPacket.DstChain, ackPacket.Sequence)
 				return err
 			}
 			var tokenName string
 			if crossChainTransaction.TokenName == "" {
-				tokenName = p.ReconciliationCli.GetTokenNameByAddress(ackPacket.Ack.Packet.SrcChain, transferData.Token)
+				tokenName = p.BridegesManager.GetTokenNameByAddress(ackPacket.SrcChain, ackPacket.Token)
 				if tokenName == "" {
-					p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", ackPacket.Ack.Packet.SrcChain, transferData.Token, ackPacket.Ack.Packet.DstChain, ackPacket.Ack.Packet.Sequence)
+					p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", ackPacket.SrcChain, ackPacket.Token, ackPacket.DstChain, ackPacket.Sequence)
 					continue
 				}
 				crossChainTx.TokenName = tokenName
@@ -321,9 +302,9 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 			}
 			srcChain := chain
 			if srcChain == nil {
-				return fmt.Errorf("invalid chain,chainName:%s", ackPacket.Ack.Packet.SrcChain)
+				return fmt.Errorf("invalid chain,chainName:%s", ackPacket.SrcChain)
 			}
-			packetFee, err := srcChain.GetPacketFee(ackPacket.Ack.Packet.SrcChain, ackPacket.Ack.Packet.DstChain, int(ackPacket.Ack.Packet.Sequence))
+			packetFee, err := srcChain.GetPacketFee(ackPacket.SrcChain, ackPacket.DstChain, int(ackPacket.Sequence))
 			if err != nil {
 				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
@@ -331,7 +312,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				p.log.Infoln("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-				decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(ackPacket.Ack.Packet.SrcChain, packetFee.TokenAddress)
+				decimals, err := p.BridegesManager.GetSingleTokenDecimals(ackPacket.SrcChain, packetFee.TokenAddress)
 				if err != nil {
 					p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 					return err
@@ -342,57 +323,17 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				fee, _ := afterDecimals.Float64()
 				crossChainTx.PacketFeePaid = fee
 			}
-			if crossChainTransaction.AmountFloat == 0 {
-				teleportDecimal, otherDecimal, err := p.ReconciliationCli.GetBridgeTokenDecimals(ackPacket.Ack.Packet.SrcChain, tokenName, ackPacket.Ack.Packet.DstChain)
-				if err != nil {
-					p.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, ackPacket.Ack.Packet, Ack, ackPacket.TxHash)
-					return err
-				}
-				var amountFloat float64
-				if ackPacket.Ack.Packet.DstChain == chains.TeleportChain {
-					tokenAmount := &chains.TokenAmount{Amount: amount}
-					amountFloat, err = tokenAmount.Float64()
-					amountFloat = amountFloat * math.Pow10(int(teleportDecimal)-int(otherDecimal))
-				} else {
-					tokenAmount := &chains.TokenAmount{Amount: amount}
-					amountFloat, err = tokenAmount.Float64()
-				}
-				if err != nil {
-					p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, ackPacket.Ack.Packet)
-					return err
-				}
-				amountStr := fmt.Sprintf("%.0f", amountFloat)
-				amountFloat, _ = strconv.ParseFloat(amountStr, 64)
-				crossChainTx.Amount = amountStr
-				crossChainTx.AmountFloat = amountFloat
-			}
 			crossChainTxs = append(crossChainTxs, crossChainTx)
 			ackcrossChainTxs = append(ackcrossChainTxs, crossChainTx)
 		}
 		// received ack
 		for _, receivedAckPacket := range pkts.RecivedAcks {
-			if receivedAckPacket.Ack.Packet.TransferData == nil {
-				continue
-			}
-			var transferData packettypes.TransferData
-			if err := transferData.ABIDecode(receivedAckPacket.Ack.Packet.TransferData); err != nil {
-				return err
-			}
-			var ack packettypes.Acknowledgement
-			if err := ack.ABIDecode(receivedAckPacket.Ack.Acknowledgement); err != nil {
-				return err
-			}
-			status, msg := getStatus(ack)
-			if status != model.Fail {
-				continue
-			}
 			crossChainTx := model.CrossChainTransaction{
-				SrcChain: receivedAckPacket.Ack.Packet.SrcChain,
-				//RelayChain:   receivedAckPacket.Ack.Packet.RelayChain,
-				DestChain:    receivedAckPacket.Ack.Packet.DstChain,
-				Sequence:     receivedAckPacket.Ack.Packet.Sequence,
+				SrcChain:     receivedAckPacket.SrcChain,
+				DestChain:    receivedAckPacket.DstChain,
+				Sequence:     receivedAckPacket.Sequence,
 				Status:       int8(model.Refund),
-				ErrMessage:   msg,
+				ErrMessage:   receivedAckPacket.ErrMsg,
 				RefundTxHash: receivedAckPacket.TxHash,
 				RefundTxTime: receivedAckPacket.TimeStamp,
 				RefundHeight: receivedAckPacket.Height,
@@ -401,11 +342,11 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				AckGasPrice: receivedAckPacket.GasPrice,
 				AckFee:      float64(receivedAckPacket.Gas) * receivedAckPacket.GasPrice / math.Pow10(int(nativeDecimal)),
 			}
-			srcChain := p.Chains[receivedAckPacket.Ack.Packet.SrcChain]
+			srcChain := p.Chains[receivedAckPacket.SrcChain]
 			if srcChain == nil {
-				return fmt.Errorf("invalid chain,chainName:%s", receivedAckPacket.Ack.Packet.SrcChain)
+				return fmt.Errorf("invalid chain,chainName:%s", receivedAckPacket.SrcChain)
 			}
-			packetFee, err := srcChain.GetPacketFee(receivedAckPacket.Ack.Packet.SrcChain, receivedAckPacket.Ack.Packet.DstChain, int(receivedAckPacket.Ack.Packet.Sequence))
+			packetFee, err := srcChain.GetPacketFee(receivedAckPacket.SrcChain, receivedAckPacket.DstChain, int(receivedAckPacket.Sequence))
 			if err != nil {
 				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
@@ -413,7 +354,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				p.log.Infoln("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-				decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(receivedAckPacket.Ack.Packet.SrcChain, packetFee.TokenAddress)
+				decimals, err := p.BridegesManager.GetSingleTokenDecimals(receivedAckPacket.SrcChain, packetFee.TokenAddress)
 				if err != nil {
 					p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 					return err
@@ -450,26 +391,25 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 	return p.reconcile(ackcrossChainTxs)
 }
 
-func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []model.CrossChainTransaction) error {
+func (p *PacketPool) HandlePacket(bizPackets []chains.BasePacketTx, crossChainTxs []model.CrossChainTransaction) error {
 	for _, pt := range bizPackets {
-		var transferData packettypes.TransferData
-		if err := transferData.ABIDecode(pt.Packet.TransferData); err != nil {
-			return err
+		a := new(big.Int)
+		amount, ok := a.SetString(pt.Amount, 10)
+		if !ok {
+			return fmt.Errorf("invalid amount")
 		}
-		a := big.Int{}
-		amount := a.SetBytes(transferData.Amount)
-		sender := pt.Packet.Sender
+		sender := pt.Sender
 		if pt.Signer != common.BytesToAddress([]byte{0x00}) {
 			sender = pt.Signer.Hex()
 		}
 		crossChainTx := model.CrossChainTransaction{
-			SrcChain: pt.Packet.SrcChain,
-			//RelayChain:       pt.Packet.RelayChain,
-			DestChain:        pt.Packet.DstChain,
-			Sequence:         pt.Packet.Sequence,
+			SrcChain: pt.SrcChain,
+			//RelayChain:       pt.RelayChain,
+			DestChain:        pt.DstChain,
+			Sequence:         pt.Sequence,
 			Sender:           sender,
-			Receiver:         transferData.Receiver,
-			SendTokenAddress: transferData.Token,
+			Receiver:         pt.Receiver,
+			SendTokenAddress: pt.Token,
 			Status:           int8(model.Pending),
 			SendTxHash:       pt.TxHash,
 			SendTxTime:       pt.TimeStamp,
@@ -477,29 +417,29 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []
 			AmountRaw:        a.String(),
 		}
 		var crossChainTransaction model.CrossChainTransaction
-		if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.Packet.SrcChain, pt.Packet.DstChain, pt.Packet.Sequence).Find(&crossChainTransaction).Error; err != nil {
+		if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", pt.SrcChain, pt.DstChain, pt.Sequence).Find(&crossChainTransaction).Error; err != nil {
 			return err
 		}
 		var tokenName string
 		if crossChainTransaction.TokenName == "" {
-			tokenName = p.ReconciliationCli.GetTokenNameByAddress(pt.Packet.SrcChain, transferData.Token)
+			tokenName = p.BridegesManager.GetTokenNameByAddress(pt.SrcChain, pt.Token)
 			if tokenName == "" {
-				p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.Packet.SrcChain, transferData.Token, pt.Packet.DstChain, pt.Packet.Sequence)
+				p.log.Errorf("skip invalid token address,chainName:%v,tokenAddress:%v\n,destChain:%v,sequence:%v", pt.SrcChain, pt.Token, pt.DstChain, pt.Sequence)
 				continue
 			}
 			crossChainTx.TokenName = tokenName
 		} else {
 			tokenName = crossChainTransaction.TokenName
 		}
-		if pt.Packet.SrcChain == chains.TeleportChain {
-			key := fmt.Sprintf("%v/%v/%v", pt.Packet.SrcChain, pt.Packet.DstChain, tokenName)
-			crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainBToken.AddressHex()
+		if pt.SrcChain == chains.TeleportChain {
+			key := fmt.Sprintf("%v/%v/%v", pt.SrcChain, pt.DstChain, tokenName)
+			crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainBToken.Address()
 		} else {
-			key := fmt.Sprintf("%v/%v/%v", pt.Packet.DstChain, pt.Packet.SrcChain, tokenName)
-			crossChainTx.ReceiveTokenAddress = p.ReconciliationCli.BridgeTokenMap[key].ChainAToken.AddressHex()
+			key := fmt.Sprintf("%v/%v/%v", pt.DstChain, pt.SrcChain, tokenName)
+			crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainAToken.Address()
 		}
-		srcChain := p.Chains[pt.Packet.SrcChain]
-		packetFee, err := srcChain.GetPacketFee(pt.Packet.SrcChain, pt.Packet.DstChain, int(pt.Packet.Sequence))
+		srcChain := p.Chains[pt.SrcChain]
+		packetFee, err := srcChain.GetPacketFee(pt.SrcChain, pt.DstChain, int(pt.Sequence))
 		if err != nil {
 			p.log.Errorf("GetPacketFee error:%+v", err)
 			return err
@@ -507,7 +447,7 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []
 			p.log.Infoln("GetPacketFee:%v", packetFee)
 		}
 		if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
-			decimals, err := p.ReconciliationCli.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
+			decimals, err := p.BridegesManager.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
 			if err != nil {
 				p.log.Errorf("GetSingleTokenDecimals error:%+v\n,chainName:%v,tokenAddr:%v", err, srcChain.ChainName(), packetFee.TokenAddress)
 				return err
@@ -519,13 +459,13 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []
 			crossChainTx.PacketFeePaid = fee
 		}
 		if crossChainTransaction.AmountFloat == 0 {
-			teleportDecimal, otherDecimal, err := p.ReconciliationCli.GetBridgeTokenDecimals(pt.Packet.SrcChain, tokenName, pt.Packet.DstChain)
+			teleportDecimal, otherDecimal, err := p.BridegesManager.GetBridgeTokenDecimals(pt.SrcChain, tokenName, pt.DstChain)
 			if err != nil {
-				p.log.Errorf("ReconciliationCli.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt.Packet, Packet, pt.TxHash)
+				p.log.Errorf("BridegesManager.GetBridgeTokenDecimals failed:%+v\n,packet:%v,packet type:%v,txHash:%v", err, pt, Packet, pt.TxHash)
 				return err
 			}
 			var amountFloat float64
-			if pt.Packet.DstChain == chains.TeleportChain {
+			if pt.DstChain == chains.TeleportChain {
 				tokenAmount := &chains.TokenAmount{Amount: amount}
 				amountFloat, err = tokenAmount.Float64()
 				amountFloat = amountFloat * math.Pow10(int(teleportDecimal)-int(otherDecimal))
@@ -534,7 +474,7 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []
 				amountFloat, err = tokenAmount.Float64()
 			}
 			if err != nil {
-				p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt.Packet)
+				p.log.Errorf("tokenAmount.Float64 failed:%+v\n,packet:%v", err, pt)
 				return err
 			}
 			amountStr := fmt.Sprintf("%.0f", amountFloat)
@@ -542,7 +482,7 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.PacketTx, crossChainTxs []
 			crossChainTx.Amount = amountStr
 			crossChainTx.AmountFloat = amountFloat
 		}
-		if pt.Packet.Sender == chains.AgentContract {
+		if pt.Sender == chains.AgentContract {
 			crossChainTx.MultiID2 = pt.MultiId
 		}
 		crossChainTxs = append(crossChainTxs, crossChainTx)
@@ -676,6 +616,9 @@ func (p *PacketPool) saveToDB(crossChainTxs []model.CrossChainTransaction, name 
 func (p *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) error {
 	if p.ReconcileEnable {
 		for _, ackCrossChainTx := range ackcrossChainTxs {
+			if !strings.Contains(ackCrossChainTx.SendTokenAddress, "0x") {
+				continue
+			}
 			var crossChainTx model.CrossChainTransaction
 			if err := p.DB.Where("src_chain = ? and dest_chain = ? and sequence = ?", ackCrossChainTx.SrcChain, ackCrossChainTx.DestChain, ackCrossChainTx.Sequence).Find(&crossChainTx).Error; err != nil {
 				return err
@@ -702,7 +645,7 @@ func (p *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) e
 				otherPacket = packetA
 			}
 			if crossChainTx.SrcHeight != 0 && crossChainTx.DestHeight != 0 {
-				bridgeReconcileResult, err := p.ReconciliationCli.Reconcile(teleportPacket, otherPacket)
+				bridgeReconcileResult, err := p.BridegesManager.Reconcile(teleportPacket, otherPacket)
 				if err != nil {
 					return err
 				}

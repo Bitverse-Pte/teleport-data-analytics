@@ -147,7 +147,7 @@ func (p *PacketPool) syncToDB(name string, c chains.BlockChain) error {
 		err = p.saveCrossChainPacketsByHeight(syncState.Height, chainHeight-delayBlock, c, updateHeight)
 	}
 	if err != nil {
-		p.log.Errorf("saveCrossChainPacketsByHeight error:%s", err)
+		p.log.Errorf("saveCrossChainPacketsByHeight error:%+v", err)
 		return err
 	}
 	return nil

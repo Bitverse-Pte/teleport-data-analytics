@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/sirupsen/logrus"
 	packettypes "github.com/teleport-network/teleport/x/xibc/core/packet/types"
 	"math/big"
 	"strconv"
@@ -101,26 +100,25 @@ func (c *TendermintClient) GetPackcetsByEvent() ([]*BaseBlockPackets, error) {
 	return nil, nil
 }
 
-func (c *TendermintClient)GetTokenLimit(addr common.Address, blockNumber *big.Int) (TokenLimit, error){
-	return TokenLimit{},nil
+func (c *TendermintClient) GetTokenLimit(addr common.Address, blockNumber *big.Int) (TokenLimit, error) {
+	return TokenLimit{}, nil
 }
 
-
-func (c *TendermintClient) GetPacketsByHash(txHash string) ([]BasePacketTx, error){
-	return nil,nil
+func (c *TendermintClient) GetPacketsByHash(txHash string) ([]BasePacketTx, error) {
+	return nil, nil
 }
 
-func (c *TendermintClient) GetTokenBalance (denom string,address string)(TokenAmount,error){
+func (c *TendermintClient) GetTokenBalance(denom string, address string) (TokenAmount, error) {
 	var tokenAmount TokenAmount
-	res,err := c.tendermintSDK.BankQuery.Balance(context.Background(),&types.QueryBalanceRequest{
-		Denom: denom,Address: address,
+	res, err := c.tendermintSDK.BankQuery.Balance(context.Background(), &types.QueryBalanceRequest{
+		Denom: denom, Address: address,
 	})
 	if err != nil {
-		return TokenAmount{},err
+		return TokenAmount{}, err
 	}
 	tokenAmount.Amount = res.Balance.Amount.BigInt()
 	// TODO decimals
-	return tokenAmount,nil
+	return tokenAmount, nil
 }
 
 //func (c *TendermintClient)
@@ -220,7 +218,7 @@ func (c *TendermintClient) GetBlockPackets(height uint64) (*BaseBlockPackets, er
 		}
 		tmpReceivedAcks, err := c.getRecievedAcks(stringEvents)
 		if err != nil {
-			return nil, fmt.Errorf("getRecievedAcks error:%v,chainName:%v,height:%v",err,c.chainName,height)
+			return nil, fmt.Errorf("getRecievedAcks error:%v,chainName:%v,height:%v", err, c.chainName, height)
 		}
 		for _, tmpReceivedAck := range tmpReceivedAcks {
 			var ibcAckReceivedTx BasePacketTx
@@ -265,11 +263,11 @@ func (c *TendermintClient) ChainName() string {
 }
 func (c *TendermintClient) GetLatestHeight() (uint64, error) {
 	// TODO
-	res,err := c.tendermintSDK.TMServiceQuery.GetLatestBlock(context.Background(),&tmservice.GetLatestBlockRequest{})
+	res, err := c.tendermintSDK.TMServiceQuery.GetLatestBlock(context.Background(), &tmservice.GetLatestBlockRequest{})
 	if err != nil {
-		return 0,err
+		return 0, err
 	}
-	return uint64(res.Block.Header.Height),nil
+	return uint64(res.Block.Header.Height), nil
 }
 func (c *TendermintClient) GetFrequency() int {
 	return c.frequency
@@ -287,8 +285,8 @@ func (c *TendermintClient) RevisedHeight() uint64 {
 	return c.revisedHeight
 }
 
-func (c *TendermintClient) GetPacketFee(srcChain, dstChain string, sequence int) (*PacketFee, error){
-	return nil,nil
+func (c *TendermintClient) GetPacketFee(srcChain, dstChain string, sequence int) (*PacketFee, error) {
+	return nil, nil
 }
 
 type IBCAck struct {
@@ -398,8 +396,8 @@ func (c *TendermintClient) getRecievedAcks(stringEvents sdk.StringEvents) ([]IBC
 	dstChannel := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyDstChannel)
 	dstPort := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyDstPort)
 	packetDatas := getValues(stringEvents, ackReceivedType, channeltypes.AttributeKeyData)
-	if !(len(sequences) == len(srcChannel)&& len(sequences) == len(srcPort) && len(sequences) == len(dstChannel) && len(sequences) == len(dstPort)){
-		return nil,fmt.Errorf("invalid getRecievedAcks")
+	if !(len(sequences) == len(srcChannel) && len(sequences) == len(srcPort) && len(sequences) == len(dstChannel) && len(sequences) == len(dstPort)) {
+		return nil, fmt.Errorf("invalid getRecievedAcks")
 	}
 	var ibcAcks []IBCAck
 	for i := 0; i < len(sequences); i++ {
@@ -456,7 +454,6 @@ func (c *TendermintClient) getChannelID(chainName string) (string, error) {
 	return c.chainNameToChannel[chainName], nil
 }
 
-
 func (c *TendermintClient) getStatus(ack packettypes.Acknowledgement) (int8, string) {
 	var status int8
 	var ackMsg string
@@ -468,5 +465,3 @@ func (c *TendermintClient) getStatus(ack packettypes.Acknowledgement) (int8, str
 	}
 	return status, ackMsg
 }
-
-

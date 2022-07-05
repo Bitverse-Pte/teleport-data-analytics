@@ -265,10 +265,8 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 		for _, ackPacket := range pkts.AckPackets {
 			crossChainTx := model.CrossChainTransaction{
 				SrcChain: ackPacket.SrcChain,
-				//RelayChain:       ackPacket.RelayChain,
 				DestChain:        ackPacket.DstChain,
 				Sequence:         ackPacket.Sequence,
-				//Receiver:         ackPacket.Receiver,
 				Status:           ackPacket.Code,
 				ErrMessage:       ackPacket.ErrMsg,
 				ReceiveTxHash:    ackPacket.TxHash,

@@ -728,7 +728,8 @@ func (p *PacketPool) initSingleDirectionBridgeMetrics() (executed bool, err erro
 
 							// init token table
 							// todo: Fee Token is not necessarily in the token list
-							bridgeKey := datas.ChainName2ChainId[src] + "/" + datas.ChainName2ChainId[dest]
+
+							bridgeKey := p.ChainMap[src] + "/" + p.ChainMap[dest]
 							tokens := datas.Bridges[bridgeKey].Tokens
 							// travel all tokens in the bridge
 							for _, token := range tokens {

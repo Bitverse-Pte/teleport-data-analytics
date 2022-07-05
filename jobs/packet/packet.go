@@ -382,7 +382,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 
 	// update metrics table by classifiedTxs
 	if !executed {
-		if err = p.updateMetrics(crossChainTxs); err != nil {
+		if err = p.UpdateMetrics(crossChainTxs); err != nil {
 			return fmt.Errorf("update metrics fail:%v", err.Error())
 		}
 	}
@@ -884,7 +884,7 @@ func (p *PacketPool) insertGlobalMetrics(dData *model.GlobalMetrics) error {
 //}
 
 // update metrics by calc bridgeTx
-func (p *PacketPool) updateMetrics(txs []model.CrossChainTransaction) error {
+func (p *PacketPool) UpdateMetrics(txs []model.CrossChainTransaction) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
 		// travel all txs
 		for _, t := range txs {
@@ -892,21 +892,15 @@ func (p *PacketPool) updateMetrics(txs []model.CrossChainTransaction) error {
 			// query SingleDirectionBridgeMetrics id by src_chain and dest_chain
 			bridgeMetrics := &model.SingleDirectionBridgeMetrics{}
 			if err := tx.Where("src_chain=? and dest_chain = ?", t.SrcChain, t.DestChain).First(bridgeMetrics).Error; err != nil {
+				// if it is new bridge then insert it
 				if err == gorm.ErrRecordNotFound {
 					bridgeMetrics.SrcChain = t.SrcChain
 					bridgeMetrics.DestChain = t.DestChain
-					bridgeMetrics.PktAmt = 1
-					if model.PacketStatus(t.Status) == model.Fail || model.PacketStatus(t.Status) == model.Refund {
-						bridgeMetrics.FailedAmt = 1
-					} else {
-						bridgeMetrics.FailedAmt = 0
-					}
 					// insert
 					if err := tx.Create(bridgeMetrics).Error; err != nil {
 						p.log.Errorf("insert SingleDirectionBridgeMetrics error:%+v", err)
 						return err
 					}
-					continue
 				} else {
 					p.log.Errorf("query SingleDirectionBridgeMetrics error:%+v", err)
 					return err
@@ -914,7 +908,7 @@ func (p *PacketPool) updateMetrics(txs []model.CrossChainTransaction) error {
 			}
 			// pkt amt +1
 			//SQL update single_direction_bridge_metrics set pkt_amt = pkt_amt+1 where src_chain= ? and dest_chain = ? ;
-			if err := p.DB.Model(&model.SingleDirectionBridgeMetrics{}).Where("id=?", bridgeMetrics.ID).Update("pkt_amt", gorm.Expr("pkt_amt+?", 1)).Error; err != nil {
+			if err := tx.Model(&model.SingleDirectionBridgeMetrics{}).Where("id=?", bridgeMetrics.ID).Update("pkt_amt", gorm.Expr("pkt_amt+?", 1)).Error; err != nil {
 				p.log.Errorf("update SingleDirectionBridgeMetrics error:%+v", err)
 				return err
 			}
@@ -928,17 +922,46 @@ func (p *PacketPool) updateMetrics(txs []model.CrossChainTransaction) error {
 				}
 			}
 
+			// if not exist the token then insert
+			token := &model.Token{}
+			if err := tx.Where("bridge_id=? and token_name=?", bridgeMetrics.ID, t.TokenName).First(token).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					token.TokenName = t.PacketFeeDemandToken
+					token.BridgeID = bridgeMetrics.ID
+					token.TokenType = 0
+					// insert
+					if err := tx.Create(token).Error; err != nil {
+						p.log.Errorf("insert Token error:%+v", err)
+						return err
+					}
+					token = &model.Token{
+						TokenName: t.TokenName,
+						BridgeID:  bridgeMetrics.ID,
+						TokenType: 1,
+					}
+					// insert
+					if err := tx.Create(token).Error; err != nil {
+						p.log.Errorf("insert Token error:%+v", err)
+						return err
+					}
+
+				} else {
+					p.log.Errorf("query Token error:%+v", err)
+					return err
+				}
+			}
+
 			// update token table
 			// update token table of fee amount
 			//SQL update token set amt = amt+? where bridge_id = (select id from single_direction_bridge_metrics where src_chain= ? and dest_chain = ? ) and token_type = ?  and token_name=?;
-			if err := p.DB.Model(&model.Token{}).Where("bridge_id = ? and token_type = ? and token_name=?", bridgeMetrics.ID, 0, t.TokenName).Update("amt", gorm.Expr("amt+?", t.PacketFee)).Error; err != nil {
+			if err := tx.Model(&model.Token{}).Where("bridge_id = ? and token_type = ? and token_name=?", bridgeMetrics.ID, 0, t.PacketFeeDemandToken).Update("amt", gorm.Expr("amt+?", t.PacketFee)).Error; err != nil {
 				p.log.Errorf("update Token error:%+v", err)
 				return err
 			}
 
 			// update token table of value amount
 			//SQL update token set amt = amt+? where bridge_id = (select id from single_direction_bridge_metrics where src_chain= ? and dest_chain = ? ) and token_type = ?  and token_name=?;
-			if err := p.DB.Model(&model.Token{}).Where("bridge_id = ? and token_type = ? and token_name=?", bridgeMetrics.ID, 1, t.TokenName).Update("amt", gorm.Expr("amt+?", t.Amount)).Error; err != nil {
+			if err := tx.Model(&model.Token{}).Where("bridge_id = ? and token_type = ? and token_name=?", bridgeMetrics.ID, 1, t.TokenName).Update("amt", gorm.Expr("amt+?", t.Amount)).Error; err != nil {
 				p.log.Errorf("update Token error:%+v", err)
 				return err
 			}

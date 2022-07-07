@@ -109,3 +109,7 @@ func Test_UpdateMetrics(t *testing.T) {
 	}
 
 }
+
+func Test_InitSingleDirectionBridgeMetrics(t *testing.T) {
+
+}

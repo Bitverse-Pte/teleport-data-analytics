@@ -30,7 +30,7 @@ func NewMetricManager() *MetricManager {
 		Subsystem: "teleport_bridge_backend",
 		Name:      "bridge_gauge",
 		Help:      "system status",
-	}, []string{"src_chain", "dest_chain", "option"})
+	}, []string{"src_chain", "dest_chain", "token_name", "token_type"})
 
 	return &MetricManager{
 		Counter:     counter,

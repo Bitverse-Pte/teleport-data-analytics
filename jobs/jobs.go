@@ -43,7 +43,7 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 		chainCliMap[evmCfg.ChainID] = evmChain
 		cs[evmCfg.ChainName] = evmChain
 		for _, token := range evmCfg.BalanceMonitorings {
-			tokenQuery := chains.NewTokenQuery(evmChain, token.AddressHex, token.TokenName,0)
+			tokenQuery := chains.NewTokenQuery(evmChain, token.AddressHex, token.TokenName, 0)
 			balanceMonitoring := monitoring.NewBalanceMonitoring(tokenQuery, token.Accounts)
 			balanceMonitorings = append(balanceMonitorings, balanceMonitoring)
 		}
@@ -61,7 +61,7 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 		chainCliMap[tendermintCfg.ChainID] = tendermintCli
 		cs[tendermintCfg.ChainName] = tendermintCli
 		for _, token := range tendermintCfg.BalanceMonitorings {
-			tokenQuery := chains.NewTokenQuery(tendermintCli, token.AddressHex, token.TokenName,0)
+			tokenQuery := chains.NewTokenQuery(tendermintCli, token.AddressHex, token.TokenName, 0)
 			balanceMonitoring := monitoring.NewBalanceMonitoring(tokenQuery, token.Accounts)
 			balanceMonitorings = append(balanceMonitorings, balanceMonitoring)
 		}
@@ -70,7 +70,7 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 	if teleportEvm == nil {
 		log.Fatalln("teleport evm client not init")
 	}
-	teleChain := chains.NewTeleport(cfg.Teleport, teleportEvm,teleportTendermint)
+	teleChain := chains.NewTeleport(cfg.Teleport, teleportEvm, teleportTendermint)
 	if cfg.Teleport.AgentAddr != "" {
 		logrus.Infof("teleport agent addr:%voverwrite default：%v", cfg.Teleport.AgentAddr, chains.AgentContract)
 		chains.AgentContract = cfg.Teleport.AgentAddr
@@ -81,7 +81,7 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 	metricsManager := metrics.NewMetricManager()
 	reconciliationCli := bridges.NewBridge(log, db, datas.Bridges, chainCliMap)
 	pool := packet.NewPacketDBPool(db, log, cs, chainMap, reconciliationCli, cfg.ReconcileEnable, metricsManager)
-	monitoringSrv := monitoring.NewMonitoring(log, metricsManager, balanceMonitorings, cs, db)
+	monitoringSrv := monitoring.NewMonitoring(log, metricsManager, balanceMonitorings, cs, db, chainMap)
 	monitoringSrv.Monitoring(scheduler)
 	return &PacketService{
 		PktPool: pool,

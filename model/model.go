@@ -15,13 +15,6 @@ const (
 	Refund
 )
 
-type TokenType uint8
-
-const (
-	PacketFee = iota + 1
-	PacketValue
-)
-
 type SyncState struct {
 	ChainName string `gorm:"primary_key"`
 	Height    uint64 `gorm:"default:1"`
@@ -47,7 +40,7 @@ type SingleDirectionBridgeMetrics struct {
 type Token struct {
 	gorm.Model
 	BridgeID  uint
-	TokenType uint8 `gorm:"default:0;"` // token type:[1:packet_fee,2:packet_value,2:liquidity_fee,3:liquidity_value]
+	TokenType `gorm:"default:0;"` // token type:[1:packet_fee,2:packet_value,2:liquidity_fee,3:liquidity_value]
 	TokenName string
 	Amt       string `gorm:"default:0;"` // amount
 }

@@ -376,7 +376,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 	// classify crossChainTxs by different bridge
 	//classifiedTxs := p.classifyCrossChainTxs(chain.ChainName(), crossChainTxs)
 	executed := false
-	if executed, err = p.initSingleDirectionBridgeMetrics(); err != nil {
+	if executed, err = p.InitSingleDirectionBridgeMetrics(); err != nil {
 		return err
 	}
 
@@ -680,7 +680,7 @@ func (p *PacketPool) reconcile(ackcrossChainTxs []model.CrossChainTransaction) e
 // Notice: this function must run after init CrossChainTransaction table
 // Warn: You must clean SingleDirectionBridgeMetrics table after you clean the CrossChainTransaction table
 // todo: packet fee token may not be the same as the token of the bridge
-func (p *PacketPool) initSingleDirectionBridgeMetrics() (executed bool, err error) {
+func (p *PacketPool) InitSingleDirectionBridgeMetrics() (executed bool, err error) {
 	// query SingleDirectionBridgeMetrics if it is empty then init otherwise update it
 	if err = p.DB.Last(&model.SingleDirectionBridgeMetrics{}).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {

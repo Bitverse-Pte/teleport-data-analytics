@@ -4,7 +4,6 @@ import (
 	"fmt"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/teleport-network/teleport-data-analytics/jobs/datas"
-	"github.com/teleport-network/teleport-data-analytics/types"
 	"math"
 	"math/big"
 	"strconv"
@@ -980,23 +979,6 @@ func (p *PacketPool) UpdateMetrics(txs []model.CrossChainTransaction) error {
 		return nil
 	})
 
-}
-
-// classify the cross chain transaction by different bridges
-func (p *PacketPool) classifyCrossChainTxs(chainName string, txs []model.CrossChainTransaction) *types.BridgeTx {
-	// if txs is empty then warn and return
-	if len(txs) == 0 {
-		p.log.Info("classifyCrossChainTxs is empty")
-		return nil
-	}
-	bridgeTx := new(types.BridgeTx)
-	bridgeTx.SrcChain = chainName
-	bridgeTx.Txs = make(map[string][]model.CrossChainTransaction)
-	// travel txs to classify the cross chain transaction by different destChain
-	for _, t := range txs {
-		bridgeTx.Txs[t.DestChain] = append(bridgeTx.Txs[t.DestChain], t)
-	}
-	return bridgeTx
 }
 
 func getStatus(ack packettypes.Acknowledgement) (model.PacketStatus, string) {

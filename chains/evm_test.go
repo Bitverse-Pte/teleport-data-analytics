@@ -165,22 +165,34 @@ func TestTeleport_GetPacketFee(t *testing.T) {
 	ethcli, err := NewEvmCli(cfg)
 	require.NoError(t, err)
 	packetTxs, err := ethcli.getPackets(1149646, 1249646)
+	t.Log(packetTxs)
+}
+
+func TestTeleport_PacketStatus(t *testing.T) {
+	cfg := config.EvmConfig{
+		EvmUrl:         "http://abd46ec6e28754f0ab2aae29deaa0c11-1510914274.ap-southeast-1.elb.amazonaws.com:8545",
+		ChainName:      "teleport",
+		ChainID:        "7001",
+		PacketContract: "0x0000000000000000000000000000000020000001",
+		PacketTopic:    packetTopic,
+		AckTopic:       ackTopic,
+		EndPointAddr:   "0x0000000000000000000000000000000020000002",
+		AgentAddr:      agentAddr,
+		AgentTopic:     agentTopic,
+	}
+	ethcli, err := NewEvmCli(cfg)
+	require.NoError(t, err)
+	packetTxs, err := ethcli.getPackets(1149646, 1249646)
 	fmt.Println(packetTxs)
-
-	//packetFee,err := ethcli.GetPacketFee("teleport","arbitrum",39)
-	//fmt.Println(packetFee)
-
-	//packets:= []packettypes.Packet{packetTxs[0]}
-	//for _,p := range packetTxs {
-	// packets = append(packets, p.Packet)
-	// fmt.Println("dest_chain:",p.Packet.DstChain)
-	//}
-	//b, _ := json.Marshal(packets)
-	//res,err := tools.Post("https://bridge.qa.davionlabs.com/bridge/status",bytes.NewBuffer(b),nil)
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
-	//fmt.Println(string(res))
+	packets:= []packettypes.Packet{{
+		SrcChain:  packetTxs[0].SrcChain,
+	}}
+	b, _ := json.Marshal(packets)
+	res,err := tools.Post("https://bridge.qa.davionlabs.com/bridge/status",bytes.NewBuffer(b),nil)
+	if err != nil {
+		t.Log(err)
+	}
+	t.Log(string(res))
 }
 
 func TestTeleport_GetMultiInfo(t *testing.T) {
@@ -213,29 +225,16 @@ func TestTeleport_GetMultiInfo(t *testing.T) {
 	}
 	_ = NewTeleport(tendermintCfg, ethcli,nil)
 	if err != nil {
-		fmt.Println(err)
+		t.Log(err)
 	}
-	//packetTxs, err := teleCli.GetPackets(1249646, 1249646)
 	packets:= []packettypes.Packet{}
-	fmt.Println(packets)
-	//for _,p := range packetTxs {
-	// packets = append(packets, p.Packet)
-	// fmt.Println("dest_chain:",p.Packet.DstChain)
-	//}
+	t.Log(packets)
 	b, _ := json.Marshal(packets)
 	res,err := tools.Post("https://bridge.qa.davionlabs.com/bridge/status",bytes.NewBuffer(b),nil)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(string(res))
-
-	//var transferData  packettypes.TransferData
-	//transferData.ABIDecode(packets[0].Packet.TransferData)
-	//fmt.Println("receiver:",transferData.Receiver)
-	//fee, err := ethcli.GetPacketFee("teleport", "rinkeby", 15)
-	//fmt.Println(fee)
-	//mutilPacket,err := ethcli.GetPacketsByHash("fd496fd20daa9e4d8ecc6efe73b31cd9ab4a7dae81153aa5baf453c172fe6e87")
-	//fmt.Println(mutilPacket)
+	t.Log(string(res))
 }
 
 func TestEth_GetHeightByHash(t *testing.T) {
@@ -263,32 +262,22 @@ func TestEth_GetHeightByHash(t *testing.T) {
 }
 
 func TestEth_GetPacket(t *testing.T) {
-	_, err := NewEvmCli(config.EvmConfig{
+	ethcli, err := NewEvmCli(config.EvmConfig{
 		EvmUrl:         "https://rinkeby.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
 		ChainName:      "rinkeby",
 		ChainID:        "4",
 		PacketContract: "0xf7268301384fb751e49fafdacd02c693eabb142c",
 		PacketTopic:    "PacketSent(bytes)",
 		AckTopic:       "AckWritten((string,string,uint64,string,bytes,bytes,string,uint64),bytes)",
+		ReceivedAckTopic: "AckPacket((string,string,uint64,string,bytes,bytes,string,uint64),bytes)",
 		EndPointAddr:   "0xe4916fd50499601dfe4fd2b40ee6d93a8035fcab",
 	})
 	if err != nil {
 		panic(err)
 	}
-	//packets, err := ethcli.getAckPackets(10855039, 10859741)
-	//if err != nil {
-	//	fmt.Printf("%+v", err)
-	//}
-	//for _, packet := range packets {
-	//	if packet.Ack.Packet.SrcChain == "teleport" && packet.Ack.Packet.DstChain == "rinkeby" && packet.Ack.Packet.Sequence == 15 {
-	//		fmt.Println(packet.Height)
-	//	}
-	//}
-	//packets, err := ethcli.GetPacketsByHash("0x0f68049c46c6d7a6b114da75dc81d1ec39643ae8e678a8ab235575d4a31c6663")
-	//if err != nil {
-	//	fmt.Printf("%+v", err)
-	//}
-
+	packets, err := ethcli.getReceivedAcks(10963774, 10964774)
+	require.NoError(t, err)
+	t.Log(packets)
 }
 
 func TestEvm_GetOutTokenAmount(t *testing.T) {

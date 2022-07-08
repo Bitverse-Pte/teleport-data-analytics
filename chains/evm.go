@@ -550,7 +550,7 @@ func (eth *Evm) getAckPackets(fromBlock, toBlock uint64) ([]BasePacketTx, error)
 // get ack packets from block
 func (eth *Evm) getReceivedAcks(fromBlock, toBlock uint64) ([]BasePacketTx, error) {
 	address := common.HexToAddress(eth.packetAddr)
-	topic := eth.ackTopic
+	topic := eth.receivedAckTopic
 	logs, err := eth.getLogs(address, topic, fromBlock, toBlock)
 	if err != nil {
 		return nil, err

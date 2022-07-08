@@ -150,7 +150,7 @@ func (p *PacketPool) syncToDB(name string, c chains.BlockChain) error {
 		err = p.saveCrossChainPacketsByHeight(syncState.Height, chainHeight-delayBlock, c, updateHeight)
 	}
 	if err != nil {
-		p.log.Errorf("saveCrossChainPacketsByHeight error:%s", err)
+		p.log.Errorf("saveCrossChainPacketsByHeight error:%+v", err)
 		return err
 	}
 	return nil
@@ -268,10 +268,8 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 		for _, ackPacket := range pkts.AckPackets {
 			crossChainTx := model.CrossChainTransaction{
 				SrcChain: ackPacket.SrcChain,
-				//RelayChain:       ackPacket.RelayChain,
 				DestChain:        ackPacket.DstChain,
 				Sequence:         ackPacket.Sequence,
-				Receiver:         ackPacket.Receiver,
 				Status:           ackPacket.Code,
 				ErrMessage:       ackPacket.ErrMsg,
 				ReceiveTxHash:    ackPacket.TxHash,

@@ -70,7 +70,11 @@ func NewPacketService(scheduler *gocron.Scheduler, cfg *config.Config) *PacketSe
 	if teleportEvm == nil {
 		log.Fatalln("teleport evm client not init")
 	}
-	teleChain := chains.NewTeleport(cfg.Teleport, teleportEvm, teleportTendermint)
+
+	if teleportTendermint == nil {
+		log.Fatalln("teleport tendermint client not init")
+	}
+	teleChain := chains.NewTeleport(cfg.Teleport, teleportEvm,teleportTendermint)
 	if cfg.Teleport.AgentAddr != "" {
 		logrus.Infof("teleport agent addr:%voverwrite default：%v", cfg.Teleport.AgentAddr, chains.AgentContract)
 		chains.AgentContract = cfg.Teleport.AgentAddr

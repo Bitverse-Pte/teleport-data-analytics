@@ -20,6 +20,38 @@ type SyncState struct {
 	Height    uint64 `gorm:"default:1"`
 }
 
+// single direction bridge metrics
+// index idx_from_to
+type SingleDirectionBridgeMetrics struct {
+	gorm.Model
+	SrcChain  string `gorm:"index:idx_from_to;comment:'src chain name'"` // chain name
+	DestChain string `gorm:"index:idx_from_to"`                          // chain name
+	PktAmt    int64  `gorm:"default:0;type:int"`                         // packet amount
+	//UsdtFeeAmt string `gorm:"default:0;"`                 // usdt fee amount
+	//TeleFeeAmt string `gorm:"default:0;"`                 // tele fee amount
+	FailedAmt int64 `gorm:"default:0;"` // failed amount
+
+	// bridge metrics contains token info
+	//Token Token `gorm:"foreignkey:bridge_id;constraint:OnDelete:cascade;"` // token
+
+}
+
+// token table
+type Token struct {
+	gorm.Model
+	BridgeID  uint
+	TokenType `gorm:"default:0;"` // token type:[1:packet_fee,2:packet_value,2:liquidity_fee,3:liquidity_value]
+	TokenName string
+	Amt       string `gorm:"default:0;"` // amount
+}
+
+// global bridge metrics
+type GlobalMetrics struct {
+	ID        int64     `gorm:"primary_key,auto_increment,unsigned"` // primary key
+	UserAmt   int64     `gorm:"default:0;type:int"`                  // user amount
+	CreatedAt time.Time `gorm:"type:timestamp"`                      // created time
+}
+
 type CrossPacket struct {
 	ID            string
 	PacketType    string

@@ -7,8 +7,9 @@ import (
 )
 
 type MetricManager struct {
-	Counter metrics.Counter
-	Gauge   metrics.Gauge
+	Counter     metrics.Counter
+	Gauge       metrics.Gauge
+	BridgeGauge metrics.Gauge
 }
 
 func NewMetricManager() *MetricManager {
@@ -24,8 +25,16 @@ func NewMetricManager() *MetricManager {
 		Name:      "gauge",
 		Help:      "system status",
 	}, []string{"chain_name", "option"})
+
+	bridgeGauge := metricsprometheus.NewGaugeFrom(prometheus.GaugeOpts{
+		Subsystem: "teleport_bridge_backend",
+		Name:      "bridge_gauge",
+		Help:      "system status",
+	}, []string{"src_chain", "dest_chain", "token_name", "token_type"})
+
 	return &MetricManager{
-		Counter: counter,
-		Gauge:   gauge,
+		Counter:     counter,
+		Gauge:       gauge,
+		BridgeGauge: bridgeGauge,
 	}
 }

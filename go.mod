@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.0.0
 	github.com/cosmos/cosmos-sdk v0.45.2
 	github.com/cosmos/ibc-go/v3 v3.0.0
+	github.com/deckarep/golang-set/v2 v2.1.0
 	github.com/ethereum/go-ethereum v1.10.16
 	github.com/gin-gonic/gin v1.7.7
 	github.com/go-co-op/gocron v1.11.0
@@ -53,7 +54,6 @@ require (
 	github.com/danieljoos/wincred v1.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deckarep/golang-set v1.8.0 // indirect
-	github.com/deckarep/golang-set/v2 v2.1.0 // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.3 // indirect
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect

@@ -145,8 +145,11 @@ func TestTeleport_NewToken(t *testing.T) {
 		AgentAddr:      agentAddr,
 		AgentTopic:     agentTopic,
 	}
-	_, err := NewEvmCli(cfg)
+	cli, err := NewEvmCli(cfg)
 	require.NoError(t, err)
+	token := NewErc20TokenQuery(cli,"0xc3296bd022783b8c851853b123df065778169a3f","usdt")
+	d,err := token.GetDecimals()
+	t.Logf("token decimals:%d",d)
 
 }
 
@@ -166,6 +169,8 @@ func TestTeleport_GetPacketFee(t *testing.T) {
 	require.NoError(t, err)
 	packetTxs, err := ethcli.getPackets(1149646, 1249646)
 	t.Log(packetTxs)
+	packetFee,_ := ethcli.GetPacketFee("teleport","rinkeby",75)
+	t.Log(packetFee)
 }
 
 func TestTeleport_PacketStatus(t *testing.T) {
@@ -183,6 +188,7 @@ func TestTeleport_PacketStatus(t *testing.T) {
 	ethcli, err := NewEvmCli(cfg)
 	require.NoError(t, err)
 	packetTxs, err := ethcli.getPackets(1149646, 1249646)
+	require.NoError(t, err)
 	fmt.Println(packetTxs)
 	packets:= []packettypes.Packet{{
 		SrcChain:  packetTxs[0].SrcChain,
@@ -278,6 +284,31 @@ func TestEth_GetPacket(t *testing.T) {
 	packets, err := ethcli.getReceivedAcks(10963774, 10964774)
 	require.NoError(t, err)
 	t.Log(packets)
+}
+
+func TestBsc_GetPacket(t *testing.T) {
+	ethcli, err := NewEvmCli(config.EvmConfig{
+		EvmUrl:         "https://data-seed-prebsc-1-s1.binance.org:8545",
+		ChainName:      "bsctest",
+		ChainID:        "97",
+		PacketContract: "0x8e84ef5d13a129183b838d833e4ac14eb0c5ceab",
+		PacketTopic:    "PacketSent(bytes)",
+		AckTopic:       "AckWritten((string,string,uint64,string,bytes,bytes,string,uint64),bytes)",
+		ReceivedAckTopic: "AckPacket((string,string,uint64,string,bytes,bytes,string,uint64),bytes)",
+		EndPointAddr:   "0xfe30de51bdb9b9784f1a05d5531d221bf66eaf70",
+	})
+	if err != nil {
+		panic(err)
+	}
+	packets, err := ethcli.GetPacketsByHash("0x6be2e3c7341b8ce966e39bb44b0be9404d6a38235f037eb651c2b7b12d1f07e0")
+	require.NoError(t, err)
+	t.Logf("%+v",packets)
+	packets, err = ethcli.GetPacketsByHash("0x05bf57b48a65ed7daa20d736bae4665f5b6f106790ca907243b7e1c59cd40fb0")
+	require.NoError(t, err)
+	t.Logf("%+v",packets)
+	packets, err = ethcli.GetPacketsByHash("0xb00a45a6385b962271509b55d44a5fc49d04115a1f753e2f7df819bac8f7af02")
+	require.NoError(t, err)
+	t.Logf("%+v",packets)
 }
 
 func TestEvm_GetOutTokenAmount(t *testing.T) {

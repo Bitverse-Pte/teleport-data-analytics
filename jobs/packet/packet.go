@@ -219,7 +219,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
 			} else {
-				p.log.Infoln("GetPacketFee:%v", packetFee)
+				p.log.Infof("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
 				decimals, err := p.BridegesManager.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
@@ -306,7 +306,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
 			} else {
-				p.log.Infoln("GetPacketFee:%v", packetFee)
+				p.log.Infof("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
 				decimals, err := p.BridegesManager.GetSingleTokenDecimals(ackPacket.SrcChain, packetFee.TokenAddress)
@@ -348,7 +348,7 @@ func (p *PacketPool) saveCrossChainPacketsByHeight(fromBlock, toBlock uint64, ch
 				p.log.Errorf("GetPacketFee error:%+v", err)
 				return err
 			} else {
-				p.log.Infoln("GetPacketFee:%v", packetFee)
+				p.log.Infof("GetPacketFee:%v", packetFee)
 			}
 			if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
 				decimals, err := p.BridegesManager.GetSingleTokenDecimals(receivedAckPacket.SrcChain, packetFee.TokenAddress)
@@ -428,20 +428,20 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.BasePacketTx, crossChainTx
 		} else {
 			tokenName = crossChainTransaction.TokenName
 		}
+		key := fmt.Sprintf("%v/%v/%v", pt.DstChain, pt.SrcChain, tokenName)
 		if pt.SrcChain == chains.TeleportChain {
-			key := fmt.Sprintf("%v/%v/%v", pt.SrcChain, pt.DstChain, tokenName)
+			key = fmt.Sprintf("%v/%v/%v", pt.SrcChain, pt.DstChain, tokenName)
 			crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainBToken.Address()
-		} else {
-			key := fmt.Sprintf("%v/%v/%v", pt.DstChain, pt.SrcChain, tokenName)
-			crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainAToken.Address()
 		}
+		crossChainTx.ReceiveTokenAddress = p.BridegesManager.BridgeTokenMap[key].ChainAToken.Address()
+		p.log.Infof("srcChain:%v,destChain:%v,ReceiveTokenAddress:%v",pt.SrcChain,pt.DstChain,crossChainTx.ReceiveTokenAddress)
 		srcChain := p.Chains[pt.SrcChain]
 		packetFee, err := srcChain.GetPacketFee(pt.SrcChain, pt.DstChain, int(pt.Sequence))
 		if err != nil {
 			p.log.Errorf("GetPacketFee error:%+v", err)
 			return err
 		} else {
-			p.log.Infoln("GetPacketFee:%v", packetFee)
+			p.log.Infof("GetPacketFee:%v", packetFee)
 		}
 		if packetFee != nil && packetFee.FeeAmount != nil && packetFee.TokenAddress != "" {
 			decimals, err := p.BridegesManager.GetSingleTokenDecimals(srcChain.ChainName(), packetFee.TokenAddress)
@@ -454,6 +454,8 @@ func (p *PacketPool) HandlePacket(bizPackets []chains.BasePacketTx, crossChainTx
 			afterDecimals := new(big.Float).Quo(feeBigFloat, new(big.Float).SetInt(div)) // evm base token decimals 1e18
 			fee, _ := afterDecimals.Float64()
 			crossChainTx.PacketFeePaid = fee
+		}else {
+			p.log.Warnf("packetFee query failed:%+v",packetFee)
 		}
 		if crossChainTransaction.AmountFloat == 0 {
 			teleportDecimal, otherDecimal, err := p.BridegesManager.GetBridgeTokenDecimals(pt.SrcChain, tokenName, pt.DstChain)
